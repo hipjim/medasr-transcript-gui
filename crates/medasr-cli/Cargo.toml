@@ -1,0 +1,23 @@
+[package]
+name = "medasr-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Phase 1 milestone binary. Exempt from the library 'max 3 peer deps' DAG rule."
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "medasr-cli"
+path = "src/main.rs"
+
+[dependencies]
+medasr-types         = { workspace = true }
+medasr-secure-buffer = { workspace = true }
+medasr-audio         = { workspace = true }
+medasr-asr           = { workspace = true }
+medasr-postprocess   = { workspace = true }

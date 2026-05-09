@@ -1,0 +1,33 @@
+/target
+**/target
+Cargo.lock.bak
+.DS_Store
+node_modules/
+ui/dist/
+ui/node_modules/
+src-tauri/target/
+src-tauri/gen/
+
+# Local model cache (never commit model files)
+*.onnx
+*.tokens
+/tmp/
+.tmp/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Build outputs
+*.dmg
+*.msi
+*.AppImage
+*.deb
+
+# Local secrets
+.env
+.env.local
+*.pem
+*.key
+release-bundle.bin

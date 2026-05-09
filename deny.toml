@@ -1,0 +1,38 @@
+# cargo-deny configuration. Enforces:
+#   - Apache-2.0 / MIT / BSD-3-Clause / Unicode-licensed deps only.
+#   - Banned crates: tauri-plugin-updater (auto-update is intentionally absent).
+#   - Banned crates outside their owner: reqwest/hyper/ureq must NOT appear
+#     in any crate other than `medasr-model`. (cargo-deny does not enforce
+#     per-crate rules; the per-crate enforcement lives in
+#     `scripts/check-dep-dag.sh`.)
+
+[graph]
+all-features = true
+
+[advisories]
+yanked = "deny"
+
+[licenses]
+allow = [
+    "Apache-2.0",
+    "MIT",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "MPL-2.0",
+    "CC0-1.0",
+    "OpenSSL",
+]
+confidence-threshold = 0.93
+
+[bans]
+multiple-versions = "warn"
+
+# Auto-updater is explicitly NOT compiled in, per the plan's "Network egress"
+# decision and R2/R8.
+deny = [
+    { name = "tauri-plugin-updater" },
+]

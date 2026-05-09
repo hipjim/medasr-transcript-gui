@@ -1,0 +1,31 @@
+[package]
+name = "medasr-lifecycle"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Orchestrator: owns state, dispatches to peers. The only library crate allowed >3 peer deps."
+
+[lints]
+workspace = true
+
+[dependencies]
+medasr-types         = { workspace = true }
+medasr-paths         = { workspace = true }
+medasr-secure-buffer = { workspace = true }
+medasr-state         = { workspace = true }
+medasr-audio         = { workspace = true }
+medasr-asr           = { workspace = true }
+medasr-postprocess   = { workspace = true }
+medasr-inject        = { workspace = true }
+medasr-focus         = { workspace = true }
+medasr-permissions   = { workspace = true }
+medasr-hotkey        = { workspace = true }
+medasr-model         = { workspace = true }
+medasr-audit         = { workspace = true }
+medasr-settings      = { workspace = true }
+tokio                = { workspace = true }
+tokio-util           = { workspace = true }
+tracing              = { workspace = true }

@@ -1,0 +1,17 @@
+[package]
+name = "medasr-audio"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Cross-platform audio capture (cpal), resampling (rubato), VAD."
+
+[lints]
+workspace = true
+
+[dependencies]
+medasr-types         = { workspace = true }
+medasr-secure-buffer = { workspace = true }
+# cpal/rubato/rtrb wired in Unit 2.

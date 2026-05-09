@@ -1,0 +1,15 @@
+[package]
+name = "medasr-focus"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Two-factor focus pin: per-OS active-window probes."
+
+[lints]
+workspace = true
+
+[dependencies]
+medasr-types = { workspace = true }

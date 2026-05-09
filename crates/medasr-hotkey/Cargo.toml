@@ -1,0 +1,16 @@
+[package]
+name = "medasr-hotkey"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Global push-to-talk hotkey (tauri-plugin-global-shortcut wrapper)."
+
+[lints]
+workspace = true
+
+[dependencies]
+medasr-types = { workspace = true }
+medasr-state = { workspace = true }

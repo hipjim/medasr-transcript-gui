@@ -1,0 +1,18 @@
+[package]
+name = "medasr-audit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Append-only structured local event log. Never includes PHI: no transcripts, no audio, no window titles."
+
+[lints]
+workspace = true
+
+[dependencies]
+medasr-types = { workspace = true }
+medasr-paths = { workspace = true }
+serde        = { workspace = true }
+serde_json   = { workspace = true }

@@ -1,0 +1,16 @@
+[package]
+name = "medasr-types"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Shared leaf types for MedASR: FocusTarget, AudioBuffer, AsrResult, errors."
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }

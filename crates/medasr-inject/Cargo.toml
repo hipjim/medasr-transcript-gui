@@ -1,0 +1,17 @@
+[package]
+name = "medasr-inject"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "KeystrokeBackend trait and per-OS impls (enigo default, FakeBackend for tests)."
+
+[lints]
+workspace = true
+
+[dependencies]
+medasr-types         = { workspace = true }
+medasr-secure-buffer = { workspace = true }
+# enigo wired in Unit 4.5

@@ -1,0 +1,18 @@
+[package]
+name = "medasr-asr"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "sherpa-onnx Rust wrapper around the int8 MedASR-CTC model."
+
+[lints]
+workspace = true
+
+[dependencies]
+medasr-types         = { workspace = true }
+medasr-secure-buffer = { workspace = true }
+# sherpa-onnx = "1.13"  # wired in Unit 3 (Spike confirmed crate exposes
+#                          MedAsrCtcModelConfig + OfflineRecognizer)

@@ -1,0 +1,16 @@
+[package]
+name = "medasr-postprocess"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Voice-command, number, and capitalization post-processing of MedASR transcripts."
+
+[lints]
+workspace = true
+
+[dependencies]
+medasr-types         = { workspace = true }
+medasr-secure-buffer = { workspace = true }

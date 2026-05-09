@@ -1,0 +1,9 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default capability set. Network egress and shell commands are NOT permitted; the only network calls happen inside `medasr-model` during the model-download flow over SPKI-pinned TLS.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default"
+  ]
+}

@@ -1,0 +1,24 @@
+[package]
+name = "medasr-secure-buffer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "PHI-bearing buffer with best-effort memory pinning (mlock/VirtualLock) and zero-on-drop."
+
+[lints]
+workspace = true
+
+[dependencies]
+zeroize = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.59", features = [
+    "Win32_System_Memory",
+    "Win32_Foundation",
+] }

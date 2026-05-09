@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+        Hardened-runtime is required by notarization. We deliberately omit
+        com.apple.security.cs.allow-unsigned-executable-memory so the
+        default-false protection applies.
+
+        There is no documented Apple "memory-pin" entitlement. mlock(2) on
+        macOS is callable without a code-signing entitlement; it is governed
+        by RLIMIT_MEMLOCK and the system vm.global_no_user_wire cap. This is
+        documented in `crates/medasr-secure-buffer/src/lib.rs`.
+    -->
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+
+    <!-- Hardened runtime — required for notarization. -->
+    <key>com.apple.security.app-sandbox</key>
+    <false/>
+</dict>
+</plist>

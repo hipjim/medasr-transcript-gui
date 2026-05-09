@@ -1,0 +1,76 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/medasr-types",
+    "crates/medasr-paths",
+    "crates/medasr-secure-buffer",
+    "crates/medasr-postprocess",
+    "crates/medasr-state",
+    "crates/medasr-audio",
+    "crates/medasr-asr",
+    "crates/medasr-inject",
+    "crates/medasr-focus",
+    "crates/medasr-permissions",
+    "crates/medasr-hotkey",
+    "crates/medasr-model",
+    "crates/medasr-audit",
+    "crates/medasr-settings",
+    "crates/medasr-lifecycle",
+    "crates/medasr-cli",
+    "src-tauri",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+authors = ["MedASR Contributors"]
+repository = "https://github.com/elostar/med-asr"
+rust-version = "1.80"
+
+[workspace.dependencies]
+# Internal crates — used by sibling crates so they share versioning
+medasr-types         = { path = "crates/medasr-types" }
+medasr-paths         = { path = "crates/medasr-paths" }
+medasr-secure-buffer = { path = "crates/medasr-secure-buffer" }
+medasr-postprocess   = { path = "crates/medasr-postprocess" }
+medasr-state         = { path = "crates/medasr-state" }
+medasr-audio         = { path = "crates/medasr-audio" }
+medasr-asr           = { path = "crates/medasr-asr" }
+medasr-inject        = { path = "crates/medasr-inject" }
+medasr-focus         = { path = "crates/medasr-focus" }
+medasr-permissions   = { path = "crates/medasr-permissions" }
+medasr-hotkey        = { path = "crates/medasr-hotkey" }
+medasr-model         = { path = "crates/medasr-model" }
+medasr-audit         = { path = "crates/medasr-audit" }
+medasr-settings      = { path = "crates/medasr-settings" }
+medasr-lifecycle     = { path = "crates/medasr-lifecycle" }
+
+# External
+thiserror   = "2"
+serde       = { version = "1", features = ["derive"] }
+serde_json  = "1"
+tokio       = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }
+tokio-util  = { version = "0.7", features = ["rt"] }
+tracing     = "0.1"
+zeroize     = { version = "1", features = ["zeroize_derive"] }
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "warn"
+missing_docs           = "allow"   # tighten later
+
+[workspace.lints.clippy]
+all       = { level = "warn", priority = -1 }
+pedantic  = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc      = "allow"
+missing_panics_doc      = "allow"
+
+[profile.release]
+lto           = "thin"
+codegen-units = 1
+strip         = "symbols"
+opt-level     = 3
+
+[profile.dev]
+opt-level = 1

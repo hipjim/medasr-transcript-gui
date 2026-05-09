@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>MedASR needs microphone access to record dictation. Audio is processed locally on this device and never leaves it.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>MedASR needs Accessibility access to type the transcribed text into the focused window.</string>
+    <key>LSUIElement</key>
+    <true/>
+</dict>
+</plist>

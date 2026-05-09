@@ -1,0 +1,17 @@
+[package]
+name = "medasr-model"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Model fetch + verify + TLS pinning + HAI-DEF EULA gating. The only crate allowed to depend on reqwest/hyper."
+
+[lints]
+workspace = true
+
+[dependencies]
+medasr-types = { workspace = true }
+medasr-paths = { workspace = true }
+# reqwest/rustls + Minisign verification wired in Unit 4.
