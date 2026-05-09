@@ -14,6 +14,10 @@ use crate::backend::{BackendError, KeystrokeBackend};
 pub enum InjectError {
     #[error("backend: {0}")]
     Backend(#[from] BackendError),
+    #[error("macOS Secure Input is engaged — keystrokes would be silently dropped")]
+    SecureInputBlocked,
+    #[error("macOS Secure Input engaged mid-stream after {chunks_typed} chunks; the partially-typed text is in the focused window")]
+    SecureInputBlockedMidStream { chunks_typed: usize },
 }
 
 pub struct Injector<B: KeystrokeBackend> {
@@ -28,30 +32,36 @@ impl<B: KeystrokeBackend> Injector<B> {
 
     /// Inject `text` according to `target.chunking_policy`. Native targets
     /// receive a single (or few) burst; VDI targets receive small chunks
-    /// with inter-chunk delays.
+    /// with inter-chunk delays. macOS Secure Input is probed BEFORE EVERY
+    /// chunk so a password field engaging mid-stream surfaces an explicit
+    /// error rather than silently dropping the rest of the transcript.
     pub fn inject(&mut self, text: &str, target: &FocusTarget) -> Result<(), InjectError> {
+        if crate::secure_input::is_secure_input_enabled() {
+            return Err(InjectError::SecureInputBlocked);
+        }
         let policy = target.chunking_policy;
         let chunk_chars = policy.chunk_chars().max(1);
         let delay = Duration::from_millis(policy.delay_ms());
 
-        // Chunk by char-boundary so we don't split UTF-8 code points.
         let mut start = 0;
         let bytes = text.as_bytes();
+        let mut chunks_typed = 0usize;
         while start < bytes.len() {
-            // Walk forward `chunk_chars` characters from `start`.
+            // Per-chunk Secure Input probe.
+            if chunks_typed > 0 && crate::secure_input::is_secure_input_enabled() {
+                return Err(InjectError::SecureInputBlockedMidStream { chunks_typed });
+            }
             let mut chars = 0;
             let mut end = start;
             while end < bytes.len() && chars < chunk_chars {
-                // Advance one full UTF-8 code point.
                 end += utf8_codepoint_len(bytes[end]);
                 chars += 1;
             }
-            // SAFETY-of-correctness: `text[start..end]` is on char
-            // boundaries because we advanced by full UTF-8 lengths.
             let chunk = std::str::from_utf8(&bytes[start..end])
                 .expect("chunk on char boundary");
             self.backend.type_unicode_string(chunk)?;
             self.backend.flush()?;
+            chunks_typed += 1;
             start = end;
             if start < bytes.len() && !delay.is_zero() {
                 sleep(delay);

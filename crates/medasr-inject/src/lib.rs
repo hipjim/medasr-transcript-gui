@@ -7,11 +7,12 @@
 //!   while native targets get bursts.
 //! - **Crucially:** this path NEVER reads or writes the system clipboard.
 
-#![forbid(unsafe_code)]
+#![deny(unsafe_op_in_unsafe_fn)]
 
 mod backend;
 mod fake;
 mod injector;
+pub mod secure_input;
 
 pub use backend::{KeystrokeBackend, BackendError};
 pub use fake::FakeBackend;

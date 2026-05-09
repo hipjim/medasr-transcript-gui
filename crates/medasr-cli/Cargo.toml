@@ -24,5 +24,6 @@ medasr-postprocess   = { workspace = true }
 medasr-hotkey        = { workspace = true }
 medasr-focus         = { workspace = true }
 medasr-inject        = { workspace = true }
+medasr-lifecycle     = { workspace = true }
 tracing              = { workspace = true }
 tracing-subscriber   = { version = "0.3", features = ["env-filter"] }

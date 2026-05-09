@@ -1,27 +1,22 @@
 //! Push-to-talk state machine.
 //!
-//! This crate is headless: it never depends on platform crates (no audio,
-//! no inject, no focus, no Tauri). The orchestrator in `medasr-lifecycle`
-//! drives transitions and dispatches side-effects.
+//! Headless: no audio, no ASR, no Tauri. The orchestrator
+//! (`medasr-lifecycle`) drives transitions and dispatches side-effects.
 //!
-//! Full impl lands in Unit 5; this stub fixes the state names so other
-//! crates can reference them.
+//! The state diagram (matches the plan's stateDiagram-v2 in the High-Level
+//! Technical Design):
+//!
+//! ```text
+//! Uninitialized -> EulaPending -> PermissionsPending -> ModelMissing
+//!   -> Downloading -> Verifying -> Warming -> Ready
+//!   -> Recording -> Transcribing -> Injecting -> Ready
+//!   (at any point: -> Aborted | Error -> Ready)
+//! ```
 
 #![forbid(unsafe_code)]
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum State {
-    Uninitialized,
-    EulaPending,
-    PermissionsPending,
-    ModelMissing,
-    Downloading,
-    Verifying,
-    Warming,
-    Ready,
-    Recording,
-    Transcribing,
-    Injecting,
-    Aborted,
-    Error,
-}
+pub mod events;
+pub mod machine;
+
+pub use events::{AbortReason, ErrorClass, Event};
+pub use machine::{Machine, State, TransitionEffect};

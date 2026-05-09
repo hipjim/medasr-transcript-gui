@@ -520,7 +520,7 @@ Organized into three phases. Phase 1 establishes the inference foundation **and 
 
 ### Phase 2: Real dictation loop
 
-- [ ] **Unit 5: Push-to-talk state machine integration**
+- [x] **Unit 5: Push-to-talk state machine integration**
 
 **Goal:** Replace the placeholder CLI loop from Unit 4.5 with the full state machine driving the audio → ASR → post-process → inject pipeline. Wire the orchestrator's concurrency model (Tokio orchestrator + audio thread + ASR worker thread + spawn_blocking injection).
 
@@ -563,7 +563,7 @@ Organized into three phases. Phase 1 establishes the inference foundation **and 
 
 ---
 
-- [ ] **Unit 6: Production text injection (KeystrokeBackend, Citrix-aware chunking, Secure Input mid-stream probe)**
+- [x] **Unit 6: Production text injection (KeystrokeBackend, Citrix-aware chunking, Secure Input mid-stream probe)**
 
 **Goal:** Production-grade injection. Replace the Unit 4.5 placeholder string with real transcripts. Add per-chunk Secure Input probing on macOS. Add Citrix-aware chunking via `FocusTarget::chunking_policy`.
 
@@ -654,7 +654,7 @@ Organized into three phases. Phase 1 establishes the inference foundation **and 
 
 ---
 
-- [ ] **Unit 8: Post-processing (PostProcessor trait, voice commands, numbers, capitalization, paths integration)**
+- [x] **Unit 8: Post-processing (PostProcessor trait, voice commands, numbers, capitalization, paths integration)**
 
 **Goal:** Transform raw MedASR transcripts into clinically-clean text via a `PostProcessor` trait. v1 ships an in-process pipeline (commands → numbers → caps). The trait is async-by-default so a v2 Python sidecar (KenLM rescoring) can plug in without re-architecting the orchestrator.
 

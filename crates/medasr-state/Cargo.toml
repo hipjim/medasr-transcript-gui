@@ -13,3 +13,5 @@ workspace = true
 
 [dependencies]
 medasr-types = { workspace = true }
+thiserror    = { workspace = true }
+tracing      = { workspace = true }

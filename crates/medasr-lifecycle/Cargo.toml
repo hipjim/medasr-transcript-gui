@@ -26,6 +26,7 @@ medasr-hotkey        = { workspace = true }
 medasr-model         = { workspace = true }
 medasr-audit         = { workspace = true }
 medasr-settings      = { workspace = true }
+thiserror            = { workspace = true }
 tokio                = { workspace = true }
 tokio-util           = { workspace = true }
 tracing              = { workspace = true }

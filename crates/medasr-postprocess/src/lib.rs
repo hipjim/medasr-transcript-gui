@@ -1,33 +1,38 @@
 //! Post-processing of raw MedASR transcripts.
 //!
-//! Implementation lands in Unit 8. v1 is a synchronous in-process pipeline of
-//! pure transforms (voice commands → numbers → caps). The trait seam stays
-//! synchronous in v1; future sidecar implementations can wrap in an async
-//! adapter at the orchestrator call-site, where `spawn_blocking` is already
-//! present.
+//! v1 pipeline (synchronous):
+//!
+//! ```text
+//! raw transcript
+//!   -> CommandsStage  (voice commands -> punctuation/structural)
+//!   -> NumbersStage   (spelled numbers -> digits, with units)
+//!   -> CapsStage      (capitalization tidy-up)
+//!   -> typed text
+//! ```
+//!
+//! All stages are pure transforms. The trait stays synchronous in v1; a
+//! future v2 KenLM-rescoring sidecar wraps this synchronous result in
+//! `spawn_blocking` at the orchestrator call site (which is where
+//! `spawn_blocking` already lives for injection), so v1's surface
+//! survives unchanged.
 
 #![forbid(unsafe_code)]
 
-/// Stage that transforms a transcript fragment.
-pub trait Stage {
-    fn apply(&self, input: &str, out: &mut String);
-}
+mod caps;
+mod commands;
+mod numbers;
+mod pipeline;
 
-/// Composite post-processor; v1 holds an ordered Vec of `Stage` impls.
-#[derive(Default)]
-pub struct Pipeline {
-    pub stages: Vec<Box<dyn Stage + Send + Sync>>,
-}
+pub use caps::CapsStage;
+pub use commands::CommandsStage;
+pub use numbers::NumbersStage;
+pub use pipeline::{Pipeline, Stage};
 
-impl Pipeline {
-    pub fn run(&self, input: &str) -> String {
-        let mut buf = String::with_capacity(input.len());
-        let mut src = input.to_owned();
-        for stage in &self.stages {
-            buf.clear();
-            stage.apply(&src, &mut buf);
-            std::mem::swap(&mut src, &mut buf);
-        }
-        src
-    }
+/// Convenience constructor for the v1 default pipeline.
+#[must_use]
+pub fn default_pipeline() -> Pipeline {
+    Pipeline::new()
+        .with(CommandsStage::default())
+        .with(NumbersStage::default())
+        .with(CapsStage::default())
 }

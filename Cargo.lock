@@ -2252,6 +2252,7 @@ dependencies = [
  "medasr-focus",
  "medasr-hotkey",
  "medasr-inject",
+ "medasr-lifecycle",
  "medasr-postprocess",
  "medasr-secure-buffer",
  "medasr-types",
@@ -2309,6 +2310,7 @@ dependencies = [
  "medasr-settings",
  "medasr-state",
  "medasr-types",
+ "thiserror 2.0.18",
  "tokio",
  "tokio-util",
  "tracing",
@@ -2380,6 +2382,8 @@ name = "medasr-state"
 version = "0.1.0"
 dependencies = [
  "medasr-types",
+ "thiserror 2.0.18",
+ "tracing",
 ]
 
 [[package]]
