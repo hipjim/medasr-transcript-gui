@@ -14,4 +14,7 @@ workspace = true
 [dependencies]
 medasr-types         = { workspace = true }
 medasr-secure-buffer = { workspace = true }
-# enigo wired in Unit 4.5
+thiserror            = { workspace = true }
+tracing              = { workspace = true }
+
+enigo = "0.2"

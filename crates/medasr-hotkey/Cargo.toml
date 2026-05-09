@@ -14,3 +14,12 @@ workspace = true
 [dependencies]
 medasr-types = { workspace = true }
 medasr-state = { workspace = true }
+thiserror    = { workspace = true }
+tracing      = { workspace = true }
+
+# Pure Rust global hotkey lib that does NOT require a winit/tao event
+# loop, so medasr-cli can run as a plain background CLI for the Phase 1
+# vertical-slice demo. When src-tauri later wires up
+# tauri-plugin-global-shortcut, it will call into the same `Hotkey` event
+# stream defined here.
+livesplit-hotkey = "0.7"

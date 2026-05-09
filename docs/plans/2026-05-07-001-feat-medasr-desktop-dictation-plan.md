@@ -477,7 +477,7 @@ Organized into three phases. Phase 1 establishes the inference foundation **and 
 
 ---
 
-- [ ] **Unit 4.5: Vertical-slice placeholder loop**
+- [x] **Unit 4.5: Vertical-slice placeholder loop**
 
 **Goal:** Validate the integration spine — hotkey press → two-factor focus pin → 200ms pause → injection of the literal string `"MEDASR PLACEHOLDER"` into the captured target — across macOS, Windows, Linux X11, AND inside Citrix Workspace 2412. Surfaces Citrix keystroke-fidelity issues, focus-pin races, hotkey conflicts, and Secure Input early.
 

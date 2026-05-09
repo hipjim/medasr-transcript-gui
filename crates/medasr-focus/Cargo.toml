@@ -13,3 +13,9 @@ workspace = true
 
 [dependencies]
 medasr-types = { workspace = true }
+thiserror    = { workspace = true }
+tracing      = { workspace = true }
+
+# Most accurate cross-platform "what is the focused window?" lookup.
+# Works on macOS, Windows, X11; refuses to run on Wayland (matches plan).
+active-win-pos-rs = "0.9"

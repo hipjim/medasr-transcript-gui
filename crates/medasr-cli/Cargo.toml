@@ -21,3 +21,8 @@ medasr-secure-buffer = { workspace = true }
 medasr-audio         = { workspace = true }
 medasr-asr           = { workspace = true }
 medasr-postprocess   = { workspace = true }
+medasr-hotkey        = { workspace = true }
+medasr-focus         = { workspace = true }
+medasr-inject        = { workspace = true }
+tracing              = { workspace = true }
+tracing-subscriber   = { version = "0.3", features = ["env-filter"] }

@@ -1,9 +1,23 @@
-//! Synthesized-keystroke text injection. Implementation lands in Unit 4.5
-//! (skeleton) and Unit 6 (Citrix-aware chunking, Secure Input mid-stream).
+//! Synthesized-keystroke text injection.
 //!
-//! The PHI flow is: post-processed transcript (in `SecureBuffer<u8>`) →
-//! injector chunks per `FocusTarget::chunking_policy` → backend dispatches
-//! synthesized keystrokes → buffer is dropped (zero-on-drop).
-//!
-//! Crucially: this path **never** reads or writes the system clipboard.
+//! - The `KeystrokeBackend` trait abstracts the per-OS keystroke synthesis
+//!   primitive. Default impl is `EnigoBackend`; tests use `FakeBackend`.
+//! - `Injector` wraps a backend and applies the `FocusTarget`'s
+//!   `ChunkingPolicy` so that Citrix targets get small chunks with delays
+//!   while native targets get bursts.
+//! - **Crucially:** this path NEVER reads or writes the system clipboard.
+
 #![forbid(unsafe_code)]
+
+mod backend;
+mod fake;
+mod injector;
+
+pub use backend::{KeystrokeBackend, BackendError};
+pub use fake::FakeBackend;
+pub use injector::{Injector, InjectError};
+
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+mod enigo_backend;
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+pub use enigo_backend::EnigoBackend;
