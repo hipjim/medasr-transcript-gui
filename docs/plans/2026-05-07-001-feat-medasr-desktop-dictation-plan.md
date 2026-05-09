@@ -340,7 +340,7 @@ Organized into three phases. Phase 1 establishes the inference foundation **and 
 
 ---
 
-- [ ] **Unit 2: Audio capture + VAD pipeline**
+- [x] **Unit 2: Audio capture + VAD pipeline**
 
 **Goal:** Cross-platform 16 kHz mono PCM capture with energy-based VAD gating. PHI-bearing audio buffers flow through `SecureBuffer`. Resamples from device-native rates to 16 kHz int16 for sherpa-onnx.
 
