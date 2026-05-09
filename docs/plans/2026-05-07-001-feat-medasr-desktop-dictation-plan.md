@@ -383,7 +383,7 @@ Organized into three phases. Phase 1 establishes the inference foundation **and 
 
 ---
 
-- [ ] **Unit 3: sherpa-onnx integration and inference path**
+- [x] **Unit 3: sherpa-onnx integration and inference path**
 
 **Goal:** Load the int8 MedASR ONNX model via sherpa-onnx Rust bindings, perform a warmup pass on first model load, and run offline batch transcription on hotkey-release. Returns a UTF-8 string and per-call latency. Supports cancellation.
 
@@ -425,7 +425,7 @@ Organized into three phases. Phase 1 establishes the inference foundation **and 
 
 ---
 
-- [ ] **Unit 4: Model download, verification, certificate pinning, and HAI-DEF EULA flow**
+- [x] **Unit 4: Model download, verification, certificate pinning, and HAI-DEF EULA flow**
 
 **Goal:** First-run flow that (a) shows the HAI-DEF Terms of Use and gates further use on acceptance, (b) downloads the int8 MedASR ONNX bundle from Hugging Face Hub (with project-controlled CDN mirror) over TLS-pinned connections, (c) verifies SHA-256 against a manifest baked + signed into the app, (d) caches into the per-user app data directory via `medasr-paths`, and (e) supports resume on interrupted downloads. Network egress is OS-filtered to allowlisted hosts during the download phase.
 

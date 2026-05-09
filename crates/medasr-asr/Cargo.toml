@@ -14,5 +14,13 @@ workspace = true
 [dependencies]
 medasr-types         = { workspace = true }
 medasr-secure-buffer = { workspace = true }
-# sherpa-onnx = "1.13"  # wired in Unit 3 (Spike confirmed crate exposes
-#                          MedAsrCtcModelConfig + OfflineRecognizer)
+thiserror            = { workspace = true }
+tracing              = { workspace = true }
+tokio-util           = { workspace = true }
+
+sherpa-onnx = { version = "1.13", default-features = false, features = ["static"] }
+
+[features]
+# `integration` enables tests that load real model files; gated to keep CI
+# fast and avoid pulling 421 MB of weights on every PR.
+integration = []

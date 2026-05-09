@@ -14,4 +14,24 @@ workspace = true
 [dependencies]
 medasr-types = { workspace = true }
 medasr-paths = { workspace = true }
-# reqwest/rustls + Minisign verification wired in Unit 4.
+thiserror    = { workspace = true }
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+tokio        = { workspace = true }
+tokio-util   = { workspace = true }
+tracing      = { workspace = true }
+
+# Per the personal/research distribution posture chosen at scaffold time:
+# - System trust store via rustls-tls-native-roots; no SPKI pinning.
+#   (TLS-pin to huggingface.co is broken anyway because LFS files redirect
+#   to a separate CDN whose SPKI rotates independently — see plan review F1.)
+# - Manifest with SHA-256s compiled in as a Rust const; the binary itself
+#   is the trust anchor.
+# - No Minisign release-bundle.bin signing layer.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots", "stream"] }
+sha2    = "0.10"
+hex     = "0.4"
+futures-util = "0.3"
+
+[dev-dependencies]
+tempfile = "3"
