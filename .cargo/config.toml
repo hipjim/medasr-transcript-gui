@@ -1,0 +1,23 @@
+## Project-wide cargo configuration. Checked into the repo so local
+## builds and CI behave the same.
+##
+## Note on flag precedence: `RUSTFLAGS` env *overrides* the [build] /
+## [target.*] rustflags here (it doesn't merge). CI workflows therefore
+## must NOT set `RUSTFLAGS` — they let this file do the work.
+
+[build]
+# Treat all warnings as errors everywhere. Was previously set via
+# `env: RUSTFLAGS: "-D warnings"` in the workflows; lives here so it
+# composes cleanly with the per-target flags below.
+rustflags = ["-D", "warnings"]
+
+[target.x86_64-pc-windows-msvc]
+# Statically link the MSVC C runtime so the produced .exe doesn't
+# depend on `vcruntime140.dll` / `msvcp140.dll` being preinstalled on
+# the user's machine (the VC++ Redistributable is missing on plenty of
+# fresh Windows installs and minimal images). Trade-off: the binary
+# grows a few MB.
+#
+# `-D warnings` is repeated because [target.<triple>] rustflags
+# shadows [build] rustflags — they don't merge.
+rustflags = ["-D", "warnings", "-C", "target-feature=+crt-static"]

@@ -7,7 +7,10 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-D warnings"
+  # `-D warnings` lives in .cargo/config.toml (build.rustflags) so it
+  # composes with the Windows-specific +crt-static target flag — setting
+  # RUSTFLAGS here would override (not merge with) target.<triple>
+  # rustflags.
 
 jobs:
   build:

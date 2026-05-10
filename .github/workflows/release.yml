@@ -17,7 +17,9 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-D warnings"
+  # See .cargo/config.toml for rustflags. RUSTFLAGS env would override
+  # (not merge with) the per-target flags there, so we deliberately
+  # leave it unset.
 
 jobs:
   build:
