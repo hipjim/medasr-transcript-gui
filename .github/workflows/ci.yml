@@ -63,6 +63,19 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - uses: EmbarkStudios/cargo-deny-action@v1
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo-deny binary
+        uses: actions/cache@v4
         with:
-          command: check bans licenses
+          path: ~/.cargo/bin/cargo-deny
+          key: cargo-deny-bin-v0.16
+      - name: Install cargo-deny
+        run: |
+          if [ ! -x ~/.cargo/bin/cargo-deny ]; then
+            cargo install cargo-deny --locked --version "^0.16"
+          fi
+      - name: Run cargo-deny
+        # Skip the `advisories` check for now — it requires the RustSec
+        # advisory DB which is a separate fetch we can wire later.
+        run: cargo deny check bans licenses

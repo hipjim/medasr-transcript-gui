@@ -93,7 +93,6 @@ struct App {
     transcript_raw: String,
     transcript_post: String,
     log: Vec<String>,
-    pipeline: Pipeline,
     asr: Option<AsrWorkerHandle>,
     rx: Option<mpsc::Receiver<WorkerMsg>>,
     /// Push-to-talk: set to true while the user holds Space.
@@ -122,7 +121,6 @@ impl App {
             transcript_raw: String::new(),
             transcript_post: String::new(),
             log: Vec::new(),
-            pipeline: default_pipeline(),
             asr: None,
             rx: None,
             ptt_active: false,
