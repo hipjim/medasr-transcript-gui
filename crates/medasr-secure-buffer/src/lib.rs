@@ -131,8 +131,9 @@ fn pin<T>(buf: &mut [T]) -> PinStatus {
     }
     let bytes = std::mem::size_of_val(buf);
     // SAFETY: pointer + length come from a live slice.
+    // VirtualLock returns Result<()> in windows-rs 0.59+.
     let rc = unsafe { VirtualLock(buf.as_ptr().cast::<core::ffi::c_void>().cast_mut(), bytes) };
-    if rc.as_bool() { PinStatus::Pinned } else { PinStatus::PinFailed }
+    if rc.is_ok() { PinStatus::Pinned } else { PinStatus::PinFailed }
 }
 
 #[cfg(windows)]
