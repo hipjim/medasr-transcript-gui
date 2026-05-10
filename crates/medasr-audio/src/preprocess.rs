@@ -7,7 +7,11 @@
 //! These helpers tighten the buffer to just the speech window, then
 //! adjust gain to MedASR's training-distribution sweet spot.
 
+use std::sync::Arc;
+
 use medasr_types::TARGET_SAMPLE_RATE_HZ;
+use rustfft::num_complex::Complex32;
+use rustfft::{Fft, FftPlanner};
 
 /// Apply a 1st-order Butterworth high-pass filter at `cutoff_hz` to the
 /// 16 kHz mono buffer in-place style (returns a new vector).
@@ -103,6 +107,157 @@ pub fn rms_normalize(samples_16k: &[i16], target_dbfs: f32) -> Vec<i16> {
     }).collect()
 }
 
+// ---------------------------------------------------------------------
+// Spectral noise subtraction (Boll 1979 magnitude-spectral subtraction).
+// ---------------------------------------------------------------------
+
+/// Frame size for STFT. 25 ms @ 16 kHz = 400 samples → round up to 512
+/// (next power of two) so rustfft is happiest.
+const NSS_FRAME: usize = 512;
+/// Hop size: 10 ms @ 16 kHz = 160 samples (50% overlap with the
+/// 25 ms frame; standard STFT analysis window for ASR pre-processing).
+const NSS_HOP: usize = 160;
+/// Over-subtraction factor. >1 trades more noise reduction for the risk
+/// of musical-noise artefacts.
+const NSS_OVER: f32 = 1.6;
+/// Spectral floor: never attenuate a bin below this fraction of its
+/// original magnitude. Prevents the speech/noise gap from going to zero
+/// (which is what causes "musical noise" tonal artefacts).
+const NSS_FLOOR: f32 = 0.05;
+
+/// Subtract the magnitude spectrum of `noise_segment` from `samples`.
+///
+/// Both inputs are 16 kHz mono int16. `noise_segment` should be a piece
+/// of audio that contains noise only — typically the first ~300 ms of a
+/// recording before the user starts speaking, or a stretch identified
+/// as silence by the VAD.
+///
+/// If `noise_segment` is too short (< one frame) or its RMS is louder
+/// than `max_noise_dbfs`, returns `samples` unchanged — better to do
+/// nothing than to subtract speech-loud "noise".
+#[must_use]
+pub fn spectral_subtract(samples: &[i16], noise_segment: &[i16], max_noise_dbfs: f32) -> Vec<i16> {
+    if samples.len() < NSS_FRAME || noise_segment.len() < NSS_FRAME {
+        return samples.to_vec();
+    }
+    if rms_dbfs(noise_segment) > max_noise_dbfs {
+        // Not actually noise — skip.
+        return samples.to_vec();
+    }
+    let mut planner = FftPlanner::<f32>::new();
+    let fft: Arc<dyn Fft<f32>> = planner.plan_fft_forward(NSS_FRAME);
+    let ifft: Arc<dyn Fft<f32>> = planner.plan_fft_inverse(NSS_FRAME);
+    let window = hann_window(NSS_FRAME);
+    let win_norm: f32 = window.iter().map(|&w| w * w).sum::<f32>() / NSS_HOP as f32;
+
+    // Estimate the noise spectrum: average magnitude across all noise
+    // frames.
+    let noise_mag = average_magnitude_spectrum(noise_segment, &window, &fft);
+
+    // Output buffer (overlap-add).
+    let mut output = vec![0.0_f32; samples.len()];
+    let mut frame = vec![Complex32::default(); NSS_FRAME];
+    let scale = f32::from(i16::MAX);
+
+    let mut start = 0;
+    while start + NSS_FRAME <= samples.len() {
+        for i in 0..NSS_FRAME {
+            let s = f32::from(samples[start + i]) / scale;
+            frame[i] = Complex32::new(s * window[i], 0.0);
+        }
+        fft.process(&mut frame);
+        for (bin_idx, bin) in frame.iter_mut().enumerate() {
+            let mag = bin.norm();
+            let n = noise_mag[bin_idx];
+            let cleaned = (mag - NSS_OVER * n).max(NSS_FLOOR * mag);
+            if mag > f32::EPSILON {
+                let factor = cleaned / mag;
+                bin.re *= factor;
+                bin.im *= factor;
+            }
+        }
+        ifft.process(&mut frame);
+        let inv_scale = 1.0 / NSS_FRAME as f32;
+        for i in 0..NSS_FRAME {
+            output[start + i] += frame[i].re * inv_scale * window[i] / win_norm;
+        }
+        start += NSS_HOP;
+    }
+    output
+        .into_iter()
+        .map(|s| (s.clamp(-1.0, 1.0) * scale) as i16)
+        .collect()
+}
+
+fn average_magnitude_spectrum(
+    noise: &[i16],
+    window: &[f32],
+    fft: &Arc<dyn Fft<f32>>,
+) -> Vec<f32> {
+    let mut accum = vec![0.0_f32; NSS_FRAME];
+    let mut frames = 0usize;
+    let mut frame = vec![Complex32::default(); NSS_FRAME];
+    let scale = f32::from(i16::MAX);
+    let mut start = 0;
+    while start + NSS_FRAME <= noise.len() {
+        for i in 0..NSS_FRAME {
+            let s = f32::from(noise[start + i]) / scale;
+            frame[i] = Complex32::new(s * window[i], 0.0);
+        }
+        fft.process(&mut frame);
+        for (i, bin) in frame.iter().enumerate() {
+            accum[i] += bin.norm();
+        }
+        frames += 1;
+        start += NSS_HOP;
+    }
+    if frames > 0 {
+        for v in &mut accum {
+            *v /= frames as f32;
+        }
+    }
+    accum
+}
+
+fn hann_window(n: usize) -> Vec<f32> {
+    (0..n)
+        .map(|i| 0.5 * (1.0 - (std::f32::consts::TAU * i as f32 / (n - 1) as f32).cos()))
+        .collect()
+}
+
+/// RMS of an int16 buffer expressed as dBFS. Empty input returns -100.
+#[must_use]
+pub fn rms_dbfs(samples: &[i16]) -> f32 {
+    if samples.is_empty() {
+        return -100.0;
+    }
+    let scale = f32::from(i16::MAX);
+    let sum_sq: f64 = samples
+        .iter()
+        .map(|&s| {
+            let n = f32::from(s) / scale;
+            f64::from(n * n)
+        })
+        .sum();
+    let rms = ((sum_sq / samples.len() as f64).sqrt()) as f32;
+    if rms <= f32::EPSILON {
+        -100.0
+    } else {
+        20.0 * rms.log10()
+    }
+}
+
+/// Peak amplitude of an int16 buffer as a 0..=1 fraction of full scale.
+#[must_use]
+pub fn peak_fraction(samples: &[i16]) -> f32 {
+    samples
+        .iter()
+        .copied()
+        .map(|s| s.saturating_abs() as f32)
+        .fold(0.0_f32, f32::max)
+        / f32::from(i16::MAX)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -182,5 +337,66 @@ mod tests {
         // current RMS (gain < 1).
         let peak: i16 = normalized.iter().copied().map(|s| s.saturating_abs()).max().unwrap();
         assert!(peak < 32_767, "peak unexpectedly clipped: {peak}");
+    }
+
+    fn white_noise(secs: f32, amplitude: i16) -> Vec<i16> {
+        // Linear congruential generator for deterministic test noise.
+        let n = (TARGET_SAMPLE_RATE_HZ as f32 * secs) as usize;
+        let mut state: u32 = 0xDEAD_BEEF;
+        (0..n)
+            .map(|_| {
+                state = state.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+                let v = (state >> 16) as i32 - 32_768;
+                ((v as f32 / 32_768.0) * amplitude as f32) as i16
+            })
+            .collect()
+    }
+
+    #[test]
+    fn spectral_subtract_attenuates_steady_noise() {
+        // 1 second of white noise at peak ≈ 5% then 1 s of louder
+        // signal+noise mixture. We use the first 600 ms as the noise
+        // estimate. After subtraction, the leading-noise RMS should
+        // drop substantially.
+        let noise = white_noise(2.0, 1_500);
+        let denoised = spectral_subtract(&noise, &noise[..16_000 / 2], -10.0);
+        let before = rms_dbfs(&noise);
+        let after = rms_dbfs(&denoised);
+        assert!(after < before - 6.0, "expected ≥6 dB reduction, before={before:.1} after={after:.1}");
+    }
+
+    #[test]
+    fn spectral_subtract_preserves_a_loud_tone() {
+        // 1 kHz tone at 30% amplitude. Noise estimate is silence — the
+        // subtraction should be ~no-op.
+        let mut tone_buf = Vec::with_capacity(16_000);
+        for i in 0..16_000 {
+            let v = (i as f32 / 16_000.0 * 1000.0 * std::f32::consts::TAU).sin() * 0.3;
+            tone_buf.push((v * f32::from(i16::MAX)) as i16);
+        }
+        let silence = vec![0_i16; 16_000];
+        let cleaned = spectral_subtract(&tone_buf, &silence, -10.0);
+        let before = peak_fraction(&tone_buf);
+        let after = peak_fraction(&cleaned);
+        assert!(after > before * 0.9, "tone was attenuated: {before:.3} -> {after:.3}");
+    }
+
+    #[test]
+    fn spectral_subtract_skips_when_noise_is_loud() {
+        // Both inputs are signal-loud; algorithm should skip and return
+        // input unchanged.
+        let signal = white_noise(1.0, 30_000);
+        let denoised = spectral_subtract(&signal, &signal, -20.0);
+        assert_eq!(signal, denoised);
+    }
+
+    #[test]
+    fn rms_dbfs_smoke() {
+        let s: Vec<i16> = (0..16_000)
+            .map(|i| ((i as f32 / 100.0).sin() * 16_384.0) as i16)
+            .collect();
+        let dbfs = rms_dbfs(&s);
+        // sin at half full scale → RMS ≈ 0.5/√2 ≈ 0.354 → ~-9 dBFS.
+        assert!(dbfs > -12.0 && dbfs < -6.0, "got {dbfs:.1}");
     }
 }

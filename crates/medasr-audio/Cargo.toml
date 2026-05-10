@@ -17,9 +17,10 @@ medasr-secure-buffer = { workspace = true }
 thiserror            = { workspace = true }
 tracing              = { workspace = true }
 
-cpal   = "0.15"
-rubato = "0.15"
-rtrb   = "0.3"
+cpal     = "0.15"
+rubato   = "0.15"
+rtrb     = "0.3"
+rustfft  = "6"
 
 [dev-dependencies]
 hound = "3"  # WAV reading for tests

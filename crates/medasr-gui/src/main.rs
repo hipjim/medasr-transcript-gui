@@ -29,9 +29,9 @@ use egui::{Color32, RichText};
 use medasr_asr::{spawn_worker, AsrCommand, AsrWorkerHandle, ModelPaths};
 use medasr_audio::{
     capture::{default_input_device, list_input_devices, start_with_device, InputDevice},
-    high_pass_filter,
+    high_pass_filter, peak_fraction,
     resample::resample_to_16k_mono,
-    rms_normalize, trim_silence,
+    rms_dbfs, rms_normalize, spectral_subtract, trim_silence,
 };
 use medasr_postprocess::{default_pipeline, Pipeline};
 use medasr_secure_buffer::SecureBuffer;
@@ -44,21 +44,47 @@ const PTT_MAX_SECS: u64 = 90;
 #[derive(Debug, Clone)]
 enum Status {
     NoModel,
+    EulaPending,
+    Downloading {
+        file: String,
+        downloaded: u64,
+        total: Option<u64>,
+    },
+    Verifying,
     Idle,
     Recording { started: Instant },
     Transcribing,
     Error(String),
 }
 
+#[derive(Debug, Clone, Default)]
+struct CycleStats {
+    audio_ms: u128,
+    inference_ms: u128,
+    peak_pct: f32,
+    rms_dbfs: f32,
+    noise_dbfs: f32,
+    snr_db: f32,
+    /// Approximate speaking rate in words per minute, computed from the
+    /// post-processed transcript over the trimmed audio length.
+    wpm: f32,
+    word_count: usize,
+    /// Did spectral noise subtraction actually run on this clip?
+    noise_subtracted: bool,
+}
+
 enum WorkerMsg {
     Transcript {
         raw: String,
         post: String,
-        inference_ms: u128,
-        audio_ms: u128,
-        peak_pct: f32,
+        stats: CycleStats,
     },
     Error(String),
+    /// First-run download progress.
+    DlProgress { file: String, downloaded: u64, total: Option<u64> },
+    DlVerifying,
+    DlComplete(PathBuf),
+    DlError(String),
 }
 
 struct App {
@@ -82,6 +108,10 @@ struct App {
     /// Peak meter shared with the active capture's audio thread.
     live_peak: Option<Arc<std::sync::atomic::AtomicU32>>,
     last_peak_pct: f32,
+    /// User toggles for the audio pipeline.
+    enable_noise_subtraction: bool,
+    /// Stats from the most recent transcribe.
+    last_stats: Option<CycleStats>,
 }
 
 impl App {
@@ -101,6 +131,8 @@ impl App {
             selected_device: default_input_device().map(|d| d.name),
             live_peak: None,
             last_peak_pct: 0.0,
+            enable_noise_subtraction: true,
+            last_stats: None,
         }
     }
 
@@ -149,12 +181,14 @@ impl App {
         let peak_share = Arc::new(std::sync::atomic::AtomicU32::new(0));
         let peak_for_worker = Arc::clone(&peak_share);
         self.live_peak = Some(peak_share);
+        let denoise = self.enable_noise_subtraction;
 
         thread::spawn(move || {
             let res = record_and_transcribe(
                 asr,
                 pipeline_clone,
                 RecordSource::LiveTimed { secs: RECORD_SECS, device, peak: peak_for_worker },
+                denoise,
             );
             match res {
                 Ok(msg) => { let _ = tx.send(msg); }
@@ -179,6 +213,7 @@ impl App {
         let peak_share = Arc::new(std::sync::atomic::AtomicU32::new(0));
         let peak_for_worker = Arc::clone(&peak_share);
         self.live_peak = Some(peak_share);
+        let denoise = self.enable_noise_subtraction;
         thread::spawn(move || {
             let res = record_and_transcribe(
                 asr,
@@ -189,6 +224,7 @@ impl App {
                     device,
                     peak: peak_for_worker,
                 },
+                denoise,
             );
             match res {
                 Ok(msg) => { let _ = tx.send(msg); }
@@ -211,9 +247,15 @@ impl App {
         self.rx = Some(rx);
         self.status = Status::Transcribing;
         self.log_line(format!("transcribing {}", path.display()));
+        let denoise = self.enable_noise_subtraction;
 
         thread::spawn(move || {
-            let res = record_and_transcribe(asr, pipeline_clone, RecordSource::Wav(path));
+            let res = record_and_transcribe(
+                asr,
+                pipeline_clone,
+                RecordSource::Wav(path),
+                denoise,
+            );
             match res {
                 Ok(msg) => { let _ = tx.send(msg); }
                 Err(e) => { let _ = tx.send(WorkerMsg::Error(format!("{e}"))); }
@@ -226,30 +268,141 @@ impl App {
 
     fn poll_worker(&mut self) {
         let Some(rx) = self.rx.as_ref() else { return };
-        match rx.try_recv() {
-            Ok(WorkerMsg::Transcript { raw, post, inference_ms, audio_ms, peak_pct }) => {
-                self.transcript_raw = raw;
-                self.transcript_post = post;
-                self.log_line(format!(
-                    "transcribed {audio_ms} ms audio in {inference_ms} ms (peak {peak_pct:.1}%)"
-                ));
-                self.status = Status::Idle;
-                self.rx = None;
-            }
-            Ok(WorkerMsg::Error(e)) => {
-                self.log_line(format!("worker error: {e}"));
-                self.status = Status::Error(e);
-                self.rx = None;
-            }
-            Err(mpsc::TryRecvError::Empty) => {}
-            Err(mpsc::TryRecvError::Disconnected) => {
-                self.rx = None;
-                if !matches!(self.status, Status::Error(_)) {
-                    self.status = Status::Error("worker thread died".into());
+        loop {
+            match rx.try_recv() {
+                Ok(WorkerMsg::Transcript { raw, post, stats }) => {
+                    self.transcript_raw = raw;
+                    self.transcript_post = post;
+                    self.log_line(format!(
+                        "transcribed {} ms audio in {} ms (peak {:.0}% rms {:.1} dBFS snr {:.1} dB wpm {:.0})",
+                        stats.audio_ms, stats.inference_ms, stats.peak_pct,
+                        stats.rms_dbfs, stats.snr_db, stats.wpm,
+                    ));
+                    self.last_stats = Some(stats);
+                    self.status = Status::Idle;
+                    self.rx = None;
+                    return;
+                }
+                Ok(WorkerMsg::Error(e)) => {
+                    self.log_line(format!("worker error: {e}"));
+                    self.status = Status::Error(e);
+                    self.rx = None;
+                    return;
+                }
+                Ok(WorkerMsg::DlProgress { file, downloaded, total }) => {
+                    self.status = Status::Downloading { file, downloaded, total };
+                    // keep draining
+                }
+                Ok(WorkerMsg::DlVerifying) => {
+                    self.status = Status::Verifying;
+                }
+                Ok(WorkerMsg::DlComplete(dir)) => {
+                    self.log_line(format!("model downloaded to {}", dir.display()));
+                    self.rx = None;
+                    self.load_model(dir);
+                    return;
+                }
+                Ok(WorkerMsg::DlError(e)) => {
+                    self.log_line(format!("download failed: {e}"));
+                    self.status = Status::Error(format!("download: {e}"));
+                    self.rx = None;
+                    return;
+                }
+                Err(mpsc::TryRecvError::Empty) => return,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    self.rx = None;
+                    if !matches!(self.status, Status::Error(_)) {
+                        self.status = Status::Error("worker thread died".into());
+                    }
+                    return;
                 }
             }
         }
     }
+
+    fn start_download(&mut self) {
+        let Some(cache_root) = medasr_paths::model_cache_dir().ok() else {
+            self.status = Status::Error("could not resolve model cache dir".into());
+            return;
+        };
+        let dest = cache_root.join(format!(
+            "medasr-{}-{}",
+            medasr_model::HF_REPO.replace('/', "_"),
+            medasr_model::HF_REVISION,
+        ));
+        let (tx, rx) = mpsc::channel();
+        self.rx = Some(rx);
+        self.status = Status::Downloading {
+            file: medasr_model::MANIFEST.first().map(|f| f.path.into()).unwrap_or_default(),
+            downloaded: 0,
+            total: None,
+        };
+        self.log_line("download: starting model fetch");
+        thread::spawn(move || run_download(dest, tx));
+    }
+
+    fn accept_eula(&mut self) {
+        match medasr_model::record_acceptance(&medasr_model::standard_record_path()) {
+            Ok(_) => {
+                self.log_line("EULA accepted");
+                self.start_download();
+            }
+            Err(e) => {
+                self.log_line(format!("could not record EULA acceptance: {e}"));
+                self.status = Status::Error(format!("eula: {e}"));
+            }
+        }
+    }
+
+    fn decline_eula(&mut self) {
+        self.log_line("EULA declined; user must accept to use MedASR");
+        self.status = Status::NoModel;
+    }
+}
+
+fn run_download(dest: PathBuf, tx: mpsc::Sender<WorkerMsg>) {
+    let rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = tx.send(WorkerMsg::DlError(format!("tokio: {e}")));
+            return;
+        }
+    };
+    rt.block_on(async move {
+        let client = medasr_model::default_client();
+        let cancel = CancellationToken::new();
+        for file in medasr_model::MANIFEST {
+            let tx_progress = tx.clone();
+            let path_for_msg = file.path.to_string();
+            let res = medasr_model::fetch_file(
+                &client,
+                file,
+                &dest,
+                &cancel,
+                move |p: medasr_model::Progress| {
+                    let _ = tx_progress.send(WorkerMsg::DlProgress {
+                        file: path_for_msg.clone(),
+                        downloaded: p.downloaded,
+                        total: p.total,
+                    });
+                },
+            )
+            .await;
+            if let Err(e) = res {
+                let _ = tx.send(WorkerMsg::DlError(format!("{e}")));
+                return;
+            }
+        }
+        let _ = tx.send(WorkerMsg::DlVerifying);
+        for file in medasr_model::MANIFEST {
+            let path = dest.join(file.path);
+            if let Err(e) = medasr_model::verify_against_manifest(&path, file) {
+                let _ = tx.send(WorkerMsg::DlError(format!("{e}")));
+                return;
+            }
+        }
+        let _ = tx.send(WorkerMsg::DlComplete(dest));
+    });
 }
 
 enum RecordSource {
@@ -269,6 +422,7 @@ fn record_and_transcribe(
     asr_tx: mpsc::Sender<AsrCommand>,
     pipeline: Pipeline,
     source: RecordSource,
+    enable_noise_subtraction: bool,
 ) -> Result<WorkerMsg, String> {
     let resampled: Vec<i16> = match source {
         RecordSource::LiveTimed { secs, device, peak } => {
@@ -343,39 +497,55 @@ fn record_and_transcribe(
         }
     };
 
-    // 1. High-pass at 80 Hz to kill HVAC / fan / room rumble that the
-    //    mel filterbank would otherwise mistake for speech energy.
+    // 1. High-pass at 80 Hz to kill HVAC / fan / room rumble.
     let filtered = high_pass_filter(&resampled, 80.0);
 
-    // 2. Trim silence at head + tail so we don't dilute the spectrogram
-    //    with non-speech. 400 ms margin keeps phoneme onsets /
-    //    coarticulation; 200 ms was clipping leading consonants on
-    //    quick utterances.
-    let trimmed = trim_silence(&filtered, 0.005, 400);
-    let trimmed = if trimmed.is_empty() { filtered } else { trimmed };
+    // 2. Optional spectral noise subtraction. Use the first 300 ms of
+    //    the high-passed audio as the noise estimate. Skips if that
+    //    head segment is signal-loud (which would mean the user spoke
+    //    immediately on press).
+    let noise_estimate_len = (16_000 * 3 / 10).min(filtered.len() / 2);
+    let noise_segment = &filtered[..noise_estimate_len];
+    let noise_dbfs_pre = rms_dbfs(noise_segment);
+    let (denoised, noise_subtracted) = if enable_noise_subtraction {
+        let out = spectral_subtract(&filtered, noise_segment, -25.0);
+        // spectral_subtract returns input unchanged if it skipped.
+        let actually_did = out != filtered;
+        (out, actually_did)
+    } else {
+        (filtered, false)
+    };
 
-    // 3. RMS-normalize to MedASR's training-distribution sweet spot
-    //    (~-20 dBFS). Quiet built-in mic captures get pulled up here
-    //    rather than relying on the recogniser's boost-only auto-gain.
+    // 3. Trim silence at head + tail.
+    let trimmed = trim_silence(&denoised, 0.005, 400);
+    let trimmed = if trimmed.is_empty() { denoised } else { trimmed };
+
+    // 4. RMS-normalize to MedASR's training-distribution sweet spot.
     let leveled = rms_normalize(&trimmed, -20.0);
 
     let n = leveled.len();
     let audio_ms = (n as u128) * 1000 / 16_000;
-    let peak: i16 = leveled.iter().copied().map(|s| s.saturating_abs()).max().unwrap_or(1);
-    let peak_pct = (peak as f32 / i16::MAX as f32) * 100.0;
+    let peak_pct = peak_fraction(&leveled) * 100.0;
+    let signal_dbfs = rms_dbfs(&leveled);
+    let snr_db = signal_dbfs - noise_dbfs_pre;
 
     // Sherpa-onnx wraps an ONNX-runtime C++ implementation that throws
     // (and cannot be caught by Rust) when the input shape is too small
-    // for the encoder's first conv kernel. Guard against PTT slips and
-    // very brief recordings here.
+    // for the encoder's first conv kernel. Guard against PTT slips.
     const MIN_ASR_SAMPLES: usize = 16_000 / 4; // 250 ms
     if n < MIN_ASR_SAMPLES {
         return Ok(WorkerMsg::Transcript {
             raw: String::new(),
             post: String::new(),
-            inference_ms: 0,
-            audio_ms,
-            peak_pct,
+            stats: CycleStats {
+                audio_ms,
+                peak_pct,
+                rms_dbfs: signal_dbfs,
+                noise_dbfs: noise_dbfs_pre,
+                snr_db,
+                noise_subtracted,
+                ..Default::default()
+            },
         });
     }
 
@@ -395,12 +565,26 @@ fn record_and_transcribe(
         .map_err(|e| format!("asr error: {e:?}"))?;
     let inference_ms = inference_started.elapsed().as_millis();
     let post = pipeline.run(&result.text);
+    let word_count = post.split_whitespace().count();
+    let wpm = if audio_ms > 0 {
+        (word_count as f32) / (audio_ms as f32 / 1000.0) * 60.0
+    } else {
+        0.0
+    };
     Ok(WorkerMsg::Transcript {
         raw: result.text,
         post,
-        inference_ms,
-        audio_ms,
-        peak_pct,
+        stats: CycleStats {
+            audio_ms,
+            inference_ms,
+            peak_pct,
+            rms_dbfs: signal_dbfs,
+            noise_dbfs: noise_dbfs_pre,
+            snr_db,
+            wpm,
+            word_count,
+            noise_subtracted,
+        },
     })
 }
 
@@ -436,6 +620,9 @@ impl eframe::App for App {
             ui.horizontal(|ui| {
                 let (label, color) = match &self.status {
                     Status::NoModel => ("⊘ no model", Color32::GRAY),
+                    Status::EulaPending => ("⚠ eula pending", Color32::from_rgb(220, 160, 60)),
+                    Status::Downloading { .. } => ("↓ downloading model", Color32::from_rgb(120, 180, 220)),
+                    Status::Verifying => ("· verifying", Color32::from_rgb(120, 180, 220)),
                     Status::Idle => ("● ready", Color32::from_rgb(80, 180, 80)),
                     Status::Recording { started } => {
                         let elapsed = started.elapsed().as_secs_f32();
@@ -466,21 +653,91 @@ impl eframe::App for App {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            // No model? Show the model picker prominently.
+            // First-run flow: NoModel -> show options.
             if matches!(self.status, Status::NoModel) {
                 ui.vertical_centered(|ui| {
                     ui.add_space(20.0);
                     ui.heading("MedASR");
-                    ui.label(RichText::new(
-                        "Pick the directory containing model.int8.onnx and tokens.txt",
-                    ).weak());
-                    ui.add_space(10.0);
-                    if ui.button("Pick model directory…").clicked() {
+                    ui.label(
+                        RichText::new("Local-only radiology dictation. Choose how to set up:")
+                            .weak(),
+                    );
+                    ui.add_space(14.0);
+                    if ui.add(egui::Button::new("⬇  Get the model (≈ 150 MB from Hugging Face)").min_size(egui::vec2(360.0, 36.0))).clicked() {
+                        self.status = Status::EulaPending;
+                    }
+                    ui.add_space(8.0);
+                    if ui.add(egui::Button::new("📁  I already have the model — pick a folder…").min_size(egui::vec2(360.0, 36.0))).clicked() {
                         if let Some(dir) = rfd::FileDialog::new().pick_folder() {
                             self.load_model(dir);
                         }
                     }
+                    ui.add_space(20.0);
+                    ui.label(
+                        RichText::new("The folder must contain model.int8.onnx and tokens.txt.")
+                            .weak()
+                            .small(),
+                    );
                 });
+                return;
+            }
+
+            // EULA gate.
+            if matches!(self.status, Status::EulaPending) {
+                ui.heading("Health AI Developer Foundations Terms");
+                ui.add_space(6.0);
+                egui::ScrollArea::vertical()
+                    .max_height(ui.available_height() - 80.0)
+                    .show(ui, |ui| {
+                        ui.label(RichText::new(medasr_model::eula::EULA_TEXT).monospace());
+                    });
+                ui.separator();
+                ui.horizontal(|ui| {
+                    if ui.add(egui::Button::new("✓ Accept & download").min_size(egui::vec2(180.0, 32.0))).clicked() {
+                        self.accept_eula();
+                    }
+                    if ui.button("✕ Decline").clicked() {
+                        self.decline_eula();
+                    }
+                });
+                return;
+            }
+
+            // Download progress.
+            if let Status::Downloading { file, downloaded, total } = self.status.clone() {
+                ui.vertical_centered(|ui| {
+                    ui.add_space(40.0);
+                    ui.heading("Downloading MedASR model");
+                    ui.add_space(8.0);
+                    ui.label(RichText::new(format!("File: {file}")).weak());
+                    ui.add_space(8.0);
+                    let mb = downloaded as f64 / 1_048_576.0;
+                    let frac = match total {
+                        Some(t) if t > 0 => downloaded as f32 / t as f32,
+                        _ => 0.0,
+                    };
+                    let label = match total {
+                        Some(t) => format!("{:.1} / {:.1} MB", mb, t as f64 / 1_048_576.0),
+                        None => format!("{mb:.1} MB"),
+                    };
+                    ui.add(egui::ProgressBar::new(frac).desired_width(360.0).text(label));
+                    ui.add_space(20.0);
+                    ui.label(RichText::new("Downloads to your OS cache directory.").weak().small());
+                });
+                ctx.request_repaint_after(Duration::from_millis(100));
+                return;
+            }
+
+            if matches!(self.status, Status::Verifying) {
+                ui.vertical_centered(|ui| {
+                    ui.add_space(40.0);
+                    ui.heading("Verifying download");
+                    ui.add_space(8.0);
+                    ui.label(RichText::new("Checking SHA-256 against the bundled manifest…").weak());
+                    ui.add_space(20.0);
+                    ui.spinner();
+                });
+                ctx.request_repaint_after(Duration::from_millis(200));
                 return;
             }
 
@@ -551,13 +808,36 @@ impl eframe::App for App {
             });
 
             ui.add_space(4.0);
-            ui.label(
-                RichText::new("Tip: hold SPACE to push-to-talk (release to transcribe).")
-                    .weak()
-                    .small(),
-            );
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new("Tip: hold SPACE to push-to-talk (release to transcribe).")
+                        .weak()
+                        .small(),
+                );
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.checkbox(&mut self.enable_noise_subtraction, "Noise subtraction");
+                });
+            });
             ui.add_space(4.0);
             ui.separator();
+
+            // Per-recording stats panel.
+            if let Some(s) = self.last_stats.clone() {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(RichText::new("Last:").strong());
+                    stat_chip(ui, "audio", &format!("{} ms", s.audio_ms));
+                    stat_chip(ui, "infer", &format!("{} ms", s.inference_ms));
+                    stat_chip(ui, "peak", &format!("{:.0}%", s.peak_pct));
+                    stat_chip(ui, "rms", &format!("{:.1} dBFS", s.rms_dbfs));
+                    stat_chip(ui, "noise", &format!("{:.1} dBFS", s.noise_dbfs));
+                    stat_chip(ui, "snr", &format!("{:.1} dB", s.snr_db));
+                    stat_chip(ui, "wpm", &format!("{:.0} ({} words)", s.wpm, s.word_count));
+                    if s.noise_subtracted {
+                        ui.label(RichText::new("• denoised").color(Color32::from_rgb(120, 180, 220)).small());
+                    }
+                });
+                ui.add_space(4.0);
+            }
 
             // Transcript pane.
             ui.label(RichText::new("Transcript").strong());
@@ -608,12 +888,25 @@ fn main() -> eframe::Result<()> {
         .init();
 
     let mut app = App::new();
-    // If a default model exists at ~/medasr-model, auto-load it for
-    // convenience during development.
+    // Try a few well-known locations for the model so a returning user
+    // doesn't have to walk the first-run flow again:
+    //   1. ~/medasr-model (dev convenience).
+    //   2. The OS cache dir we wrote to during a previous first-run flow.
+    let mut candidates: Vec<PathBuf> = Vec::new();
     if let Some(home) = dirs_home() {
-        let default = home.join("medasr-model");
-        if default.join("model.int8.onnx").is_file() && default.join("tokens.txt").is_file() {
-            app.load_model(default);
+        candidates.push(home.join("medasr-model"));
+    }
+    if let Ok(cache_root) = medasr_paths::model_cache_dir() {
+        candidates.push(cache_root.join(format!(
+            "medasr-{}-{}",
+            medasr_model::HF_REPO.replace('/', "_"),
+            medasr_model::HF_REVISION,
+        )));
+    }
+    for dir in candidates {
+        if dir.join("model.int8.onnx").is_file() && dir.join("tokens.txt").is_file() {
+            app.load_model(dir);
+            break;
         }
     }
 
@@ -633,4 +926,13 @@ fn dirs_home() -> Option<PathBuf> {
 
 fn dbfs_from(linear: f32) -> f32 {
     if linear <= f32::EPSILON { -100.0 } else { 20.0 * linear.log10() }
+}
+
+fn stat_chip(ui: &mut egui::Ui, label: &str, value: &str) {
+    ui.label(
+        RichText::new(format!("{label}: {value}"))
+            .small()
+            .background_color(Color32::from_rgb(38, 42, 50))
+            .color(Color32::from_rgb(220, 220, 220)),
+    );
 }

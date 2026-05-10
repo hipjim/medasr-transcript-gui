@@ -24,6 +24,8 @@ pub mod vad;
 
 pub use buffer::{RecordingBuilder, RecordingOutcome};
 pub use capture::{AudioCapture, CaptureConfig, CaptureError};
-pub use preprocess::{high_pass_filter, rms_normalize, trim_silence};
+pub use preprocess::{
+    high_pass_filter, peak_fraction, rms_dbfs, rms_normalize, spectral_subtract, trim_silence,
+};
 pub use resample::{resample_to_16k_mono, ResampleError};
 pub use vad::{EnergyVad, VadDecision, VadParams};

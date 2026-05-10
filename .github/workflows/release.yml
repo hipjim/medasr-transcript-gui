@@ -1,0 +1,197 @@
+name: Release
+
+# Triggered by pushing a tag that looks like `v0.1.0`. Builds the GUI
+# binary on each platform and attaches the zipped artifacts to a GitHub
+# Release. The MedASR model itself is *not* shipped — the app downloads
+# it on first launch under HAI-DEF terms (see the in-app EULA flow).
+
+on:
+  push:
+    tags:
+      - "v*"
+  # Manual trigger so you can dry-run the build without cutting a tag.
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  build:
+    name: Build (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            target: aarch64-apple-darwin
+            label: macos-arm64
+            archive_ext: zip
+            binary: medasr-gui
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            label: windows-x64
+            archive_ext: zip
+            binary: medasr-gui.exe
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            label: linux-x64
+            archive_ext: tar.gz
+            binary: medasr-gui
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Linux GUI + audio deps
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libgl1-mesa-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxcb1-dev libxrandr-dev libxi-dev libxcursor-dev libx11-dev \
+            libgtk-3-dev libssl-dev \
+            libasound2-dev
+
+      - name: Cache cargo registry + target
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}-release
+
+      - name: Build release
+        run: cargo build --release --target ${{ matrix.target }} -p medasr-gui
+
+      - name: Stage release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          STAGE="medasr-${{ github.ref_name }}-${{ matrix.label }}"
+          mkdir -p "stage/$STAGE"
+          cp "target/${{ matrix.target }}/release/${{ matrix.binary }}" "stage/$STAGE/"
+          cp LICENSE "stage/$STAGE/"
+          cp README.md "stage/$STAGE/"
+          # First-run quick reference for the user.
+          cat > "stage/$STAGE/FIRST-RUN.txt" <<'EOF'
+          MedASR — first run
+          ==================
+
+          1. Launch medasr-gui (or medasr-gui.exe on Windows).
+          2. The first launch will show the Health AI Developer Foundations
+             (HAI-DEF) terms. Read them, then click "Accept & download".
+          3. The app fetches model.int8.onnx (~150 MB) and tokens.txt from
+             Hugging Face (csukuangfj/sherpa-onnx-medasr-ctc-en-int8-2025-12-25)
+             into your OS cache directory. This requires internet access.
+          4. After verification the app is ready. Subsequent launches do not
+             re-download.
+
+          Permissions
+          -----------
+          - macOS: grant Microphone access when prompted.
+          - Windows: allow microphone access in Privacy settings.
+          - Linux: standard ALSA / PulseAudio setup; runs on X11.
+
+          Push-to-talk
+          ------------
+          Hold SPACE in the app window to record; release to transcribe.
+          Or click the "Record 5 s" button.
+
+          Privacy
+          -------
+          PHI never leaves the device. The model is downloaded once over
+          HTTPS; transcription happens entirely locally via sherpa-onnx +
+          ONNX Runtime.
+
+          Apache 2.0 covers the app code (see LICENSE). The MedASR model
+          weights are governed by Google's HAI-DEF Terms of Use.
+          EOF
+
+      - name: Pack zip (macOS / Windows)
+        if: matrix.archive_ext == 'zip'
+        shell: bash
+        working-directory: stage
+        run: |
+          set -euo pipefail
+          STAGE="medasr-${{ github.ref_name }}-${{ matrix.label }}"
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            powershell -Command "Compress-Archive -Path '$STAGE' -DestinationPath '$STAGE.zip'"
+          else
+            zip -r "$STAGE.zip" "$STAGE"
+          fi
+
+      - name: Pack tar.gz (Linux)
+        if: matrix.archive_ext == 'tar.gz'
+        shell: bash
+        working-directory: stage
+        run: |
+          STAGE="medasr-${{ github.ref_name }}-${{ matrix.label }}"
+          tar -czf "$STAGE.tar.gz" "$STAGE"
+
+      - name: Upload artifact for release job
+        uses: actions/upload-artifact@v4
+        with:
+          name: medasr-${{ matrix.label }}
+          path: stage/medasr-*.${{ matrix.archive_ext }}
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-22.04
+    # Skip the publish step on workflow_dispatch (dry-run mode).
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -R dist
+
+      - name: Create or update release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            dist/medasr-*.zip
+            dist/medasr-*.tar.gz
+          body: |
+            ## MedASR ${{ github.ref_name }}
+
+            Local-only push-to-talk dictation desktop app powered by Google's
+            MedASR Conformer-CTC model.
+
+            ### Downloads
+
+            - **macOS (Apple Silicon)** — `medasr-${{ github.ref_name }}-macos-arm64.zip`
+            - **Windows (x64)** — `medasr-${{ github.ref_name }}-windows-x64.zip`
+            - **Linux (x64, X11)** — `medasr-${{ github.ref_name }}-linux-x64.tar.gz`
+
+            ### First-run setup
+
+            See `FIRST-RUN.txt` inside the archive. The MedASR model is
+            downloaded on first launch (~150 MB) under HAI-DEF terms;
+            it is **not** included in the release archive.
+
+            ### Privacy
+
+            PHI never leaves the device. Audio and transcripts stay local
+            to your machine; only the model download phase touches the
+            network.
+
+            ### License
+
+            App code: Apache 2.0. Model weights: Google HAI-DEF Terms of
+            Use (in-app EULA gate).
