@@ -81,6 +81,27 @@ jobs:
           cp "target/${{ matrix.target }}/release/${{ matrix.binary }}" "stage/$STAGE/"
           cp LICENSE "stage/$STAGE/"
           cp README.md "stage/$STAGE/"
+
+      # Bundle the MSVC C runtime DLLs alongside medasr-gui.exe so the
+      # binary runs on machines without the Visual C++ Redistributable
+      # installed. (We deliberately do NOT use static-CRT linking
+      # because sherpa-onnx-sys's prebuilt C++ library is dynamic-CRT,
+      # and mixing the two corrupts the heap at runtime.)
+      - name: Bundle Windows VC runtime DLLs
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          STAGE="medasr-${{ github.ref_name }}-${{ matrix.label }}"
+          for dll in vcruntime140.dll vcruntime140_1.dll msvcp140.dll; do
+            src="/c/Windows/System32/$dll"
+            if [ -f "$src" ]; then
+              cp "$src" "stage/$STAGE/"
+              echo "bundled $dll"
+            else
+              echo "warning: $dll not found at $src"
+            fi
+          done
           # First-run quick reference for the user.
           cat > "stage/$STAGE/FIRST-RUN.txt" <<'EOF'
           MedASR — first run

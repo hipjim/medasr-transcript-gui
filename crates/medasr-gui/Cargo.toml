@@ -27,6 +27,7 @@ tokio                = { workspace = true }
 tokio-util           = { workspace = true }
 tracing              = { workspace = true }
 tracing-subscriber   = { version = "0.3", features = ["env-filter"] }
+tracing-appender     = "0.2"
 
 eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
 egui   = "0.31"

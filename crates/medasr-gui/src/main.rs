@@ -1016,12 +1016,11 @@ impl eframe::App for App {
 }
 
 fn main() -> eframe::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("info".parse().unwrap()),
-        )
-        .init();
+    // File logging + panic hook. The Windows release build uses
+    // `windows_subsystem = "windows"`, so stdout/stderr are detached
+    // and silent crashes leave no trace. The log file solves that.
+    let _log_guard = init_logging();
+    install_panic_hook();
 
     let mut app = App::new();
     // Try a few well-known locations for the model so a returning user
@@ -1078,6 +1077,74 @@ fn load_window_icon() -> Option<std::sync::Arc<egui::IconData>> {
 
 fn dirs_home() -> Option<PathBuf> {
     std::env::var_os("HOME").map(PathBuf::from)
+}
+
+/// Resolve the log directory. Prefers `medasr_paths::data_dir()/logs`;
+/// falls back to a temp-relative path so logging never panics on
+/// startup if path resolution fails.
+fn log_dir() -> PathBuf {
+    medasr_paths::data_dir()
+        .map(|d| d.join("logs"))
+        .unwrap_or_else(|_| std::env::temp_dir().join("medasr-logs"))
+}
+
+/// Set up tracing to write to BOTH stderr (for `cargo run` / console
+/// users) AND a daily-rotating file under the OS data dir. Returns the
+/// non-blocking writer's `WorkerGuard`; main holds it for the process
+/// lifetime so buffered writes flush on exit.
+///
+/// Log file path is printed to stderr at startup so console users can
+/// `tail -f` it; on Windows GUI launches there's no console, but the
+/// path is also surfaced inside the app's UI log on first launch.
+fn init_logging() -> Option<tracing_appender::non_blocking::WorkerGuard> {
+    use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+
+    let dir = log_dir();
+    let _ = std::fs::create_dir_all(&dir);
+
+    let file_appender = tracing_appender::rolling::daily(&dir, "medasr.log");
+    let (file_writer, guard) = tracing_appender::non_blocking(file_appender);
+
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info"));
+
+    let stderr_layer = fmt::layer().with_writer(std::io::stderr);
+    let file_layer = fmt::layer()
+        .with_writer(file_writer)
+        .with_ansi(false)
+        .with_target(true);
+
+    let _ = tracing_subscriber::registry()
+        .with(env_filter)
+        .with(stderr_layer)
+        .with(file_layer)
+        .try_init();
+
+    eprintln!("medasr: logging to {}", dir.display());
+    tracing::info!("medasr starting; log dir = {}", dir.display());
+    Some(guard)
+}
+
+/// Wire panic info into the tracing log so post-mortem debugging on
+/// Windows GUI launches has at least one record of what went wrong.
+fn install_panic_hook() {
+    let prev = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let location = info
+            .location()
+            .map(|l| format!("{}:{}", l.file(), l.line()))
+            .unwrap_or_else(|| "<unknown>".to_string());
+        let payload = info
+            .payload()
+            .downcast_ref::<&str>()
+            .copied()
+            .or_else(|| info.payload().downcast_ref::<String>().map(String::as_str))
+            .unwrap_or("<non-string panic payload>");
+        tracing::error!("PANIC at {location}: {payload}");
+        // Best-effort flush is implicit when the WorkerGuard drops at
+        // process exit; nothing else to do here.
+        prev(info);
+    }));
 }
 
 fn dbfs_from(linear: f32) -> f32 {

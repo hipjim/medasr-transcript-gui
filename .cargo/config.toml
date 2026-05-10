@@ -12,12 +12,18 @@
 rustflags = ["-D", "warnings"]
 
 [target.x86_64-pc-windows-msvc]
-# Statically link the MSVC C runtime so the produced .exe doesn't
-# depend on `vcruntime140.dll` / `msvcp140.dll` being preinstalled on
-# the user's machine (the VC++ Redistributable is missing on plenty of
-# fresh Windows installs and minimal images). Trade-off: the binary
-# grows a few MB.
+# We tried `-C target-feature=+crt-static` in v0.1.1 and it caused
+# silent crashes on launch. Root cause: sherpa-onnx-sys ships a
+# prebuilt static C++ library that was built against the *dynamic*
+# MSVC runtime (/MD). Linking Rust with /MT on top produces a binary
+# with two C runtimes glued together; cross-runtime malloc/free
+# corrupts the heap and the process dies during init.
+#
+# Fix: keep the dynamic CRT here, and ship vcruntime140.dll +
+# msvcp140.dll alongside the .exe in the release archive (see
+# .github/workflows/release.yml). End users get a self-contained
+# folder; no Visual C++ Redistributable install needed.
 #
 # `-D warnings` is repeated because [target.<triple>] rustflags
 # shadows [build] rustflags — they don't merge.
-rustflags = ["-D", "warnings", "-C", "target-feature=+crt-static"]
+rustflags = ["-D", "warnings"]
