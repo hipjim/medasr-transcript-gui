@@ -14,6 +14,7 @@ yanked = "deny"
 
 [licenses]
 allow = [
+    # Permissive code licenses.
     "Apache-2.0",
     "MIT",
     "BSD-2-Clause",
@@ -25,6 +26,13 @@ allow = [
     "MPL-2.0",
     "CC0-1.0",
     "OpenSSL",
+    # Boost Software License — used by clipboard-win (transitive dep
+    # of egui via arboard). OSI-approved, FSF-Libre.
+    "BSL-1.0",
+    # Font licenses — pulled in by egui's bundled default fonts
+    # (epaint_default_fonts).
+    "OFL-1.1",          # SIL Open Font License 1.1
+    "Ubuntu-font-1.0",  # Ubuntu Font Licence
 ]
 confidence-threshold = 0.93
 
