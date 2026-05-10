@@ -1,0 +1,4 @@
+// Windows resource script — embedded into the .exe by build.rs via
+// embed-resource. The IDI_ICON1 ID is the conventional one Windows uses
+// to display the app's icon in Explorer / taskbar / Alt-Tab.
+IDI_ICON1 ICON "../../assets/icon/icon.ico"

@@ -32,3 +32,7 @@ eframe = { version = "0.31", default-features = false, features = ["default_font
 egui   = "0.31"
 rfd    = "0.14"
 hound  = "3"
+image  = { version = "0.25", default-features = false, features = ["png"] }
+
+[target.'cfg(windows)'.build-dependencies]
+embed-resource = "3"

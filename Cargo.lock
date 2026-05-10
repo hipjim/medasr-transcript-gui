@@ -3173,7 +3173,9 @@ version = "0.1.0"
 dependencies = [
  "eframe",
  "egui",
+ "embed-resource",
  "hound",
+ "image",
  "medasr-asr",
  "medasr-audio",
  "medasr-model",

@@ -910,14 +910,31 @@ fn main() -> eframe::Result<()> {
         }
     }
 
-    let opts = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([720.0, 540.0])
-            .with_min_inner_size([520.0, 380.0])
-            .with_title("MedASR"),
-        ..Default::default()
-    };
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_inner_size([720.0, 540.0])
+        .with_min_inner_size([520.0, 380.0])
+        .with_title("MedASR");
+    if let Some(icon) = load_window_icon() {
+        viewport = viewport.with_icon(icon);
+    }
+
+    let opts = eframe::NativeOptions { viewport, ..Default::default() };
     eframe::run_native("MedASR", opts, Box::new(|_cc| Ok(Box::new(app))))
+}
+
+/// Load the embedded PNG icon and convert it to the egui `IconData`
+/// representation. Returns `None` on any decode failure rather than
+/// crashing — the app still runs, the OS just falls back to a default.
+fn load_window_icon() -> Option<std::sync::Arc<egui::IconData>> {
+    const PNG: &[u8] = include_bytes!("../../../assets/icon/icon-256.png");
+    let img = image::load_from_memory_with_format(PNG, image::ImageFormat::Png).ok()?;
+    let rgba = img.to_rgba8();
+    let (w, h) = rgba.dimensions();
+    Some(std::sync::Arc::new(egui::IconData {
+        rgba: rgba.into_raw(),
+        width: w,
+        height: h,
+    }))
 }
 
 fn dirs_home() -> Option<PathBuf> {
