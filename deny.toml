@@ -16,6 +16,9 @@ yanked = "deny"
 allow = [
     # Permissive code licenses.
     "Apache-2.0",
+    # Apache-2.0 with LLVM exception — used by LLVM-derived crates
+    # (e.g. tracing-attributes' wasi/zerocopy chain).
+    "Apache-2.0 WITH LLVM-exception",
     "MIT",
     "BSD-2-Clause",
     "BSD-3-Clause",
@@ -26,6 +29,9 @@ allow = [
     "MPL-2.0",
     "CC0-1.0",
     "OpenSSL",
+    # Linux Foundation Community Data License Agreement, Permissive 2.0 —
+    # used by some webpki / rustls-related crates' embedded data.
+    "CDLA-Permissive-2.0",
     # Boost Software License — used by clipboard-win (transitive dep
     # of egui via arboard). OSI-approved, FSF-Libre.
     "BSL-1.0",

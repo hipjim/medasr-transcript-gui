@@ -29,7 +29,9 @@ peer_deps() {
 }
 
 # Allowed >3 peer deps for these names (library exception + binaries).
-unlimited_peers='medasr-lifecycle medasr-cli medasr-app'
+# medasr-lifecycle is the orchestrator (intentional fan-in); medasr-cli,
+# medasr-app, and medasr-gui are binaries, exempt from the library cap.
+unlimited_peers='medasr-lifecycle medasr-cli medasr-app medasr-gui'
 
 check_crate() {
     local toml="$1"
