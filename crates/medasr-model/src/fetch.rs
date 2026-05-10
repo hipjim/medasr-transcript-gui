@@ -87,9 +87,7 @@ where
     if !status.is_success() && status.as_u16() != 206 {
         return Err(FetchError::Status(status.as_u16(), file.path.into()));
     }
-    let total_size = resp
-        .content_length()
-        .map(|cl| cl + existing_bytes);
+    let total_size = resp.content_length().map(|cl| cl + existing_bytes);
 
     let mut file_handle = OpenOptions::new()
         .create(true)

@@ -10,8 +10,8 @@ pub struct EnigoBackend {
 
 impl EnigoBackend {
     pub fn new() -> Result<Self, BackendError> {
-        let enigo = Enigo::new(&Settings::default())
-            .map_err(|e| BackendError::Init(format!("{e}")))?;
+        let enigo =
+            Enigo::new(&Settings::default()).map_err(|e| BackendError::Init(format!("{e}")))?;
         Ok(Self { enigo })
     }
 }

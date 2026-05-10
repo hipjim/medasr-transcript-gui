@@ -26,5 +26,7 @@ pub trait KeystrokeBackend {
 
     /// Force any buffered keystrokes to be delivered before returning.
     /// Default impl is a no-op (most backends auto-flush per call).
-    fn flush(&mut self) -> Result<(), BackendError> { Ok(()) }
+    fn flush(&mut self) -> Result<(), BackendError> {
+        Ok(())
+    }
 }

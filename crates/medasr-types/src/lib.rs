@@ -5,12 +5,12 @@
 
 #![forbid(unsafe_code)]
 
+pub mod asr;
+pub mod audio;
 pub mod errors;
 pub mod focus;
-pub mod audio;
-pub mod asr;
 
+pub use asr::*;
+pub use audio::*;
 pub use errors::*;
 pub use focus::*;
-pub use audio::*;
-pub use asr::*;

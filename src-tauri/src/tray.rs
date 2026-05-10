@@ -2,7 +2,7 @@
 //! error) lands in Unit 7 using the `tauri::tray` core module
 //! (`TrayIconBuilder`, `TrayIconEvent`).
 
-use tauri::{App, tray::TrayIconBuilder};
+use tauri::{tray::TrayIconBuilder, App};
 
 pub fn install(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     let _tray = TrayIconBuilder::new()

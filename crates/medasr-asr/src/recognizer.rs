@@ -67,18 +67,20 @@ impl Asr {
             return Err(AsrError::Cancelled);
         }
 
-        let mut cfg = OfflineRecognizerConfig::default();
-        cfg.model_config = OfflineModelConfig {
-            medasr: OfflineMedAsrCtcModelConfig {
-                model: Some(paths.model_int8_onnx.to_string_lossy().into_owned()),
+        let cfg = OfflineRecognizerConfig {
+            model_config: OfflineModelConfig {
+                medasr: OfflineMedAsrCtcModelConfig {
+                    model: Some(paths.model_int8_onnx.to_string_lossy().into_owned()),
+                },
+                tokens: Some(paths.tokens_txt.to_string_lossy().into_owned()),
+                num_threads: num_threads(),
+                debug: std::env::var("MEDASR_DEBUG").is_ok(),
+                provider: Some("cpu".to_string()),
+                ..Default::default()
             },
-            tokens: Some(paths.tokens_txt.to_string_lossy().into_owned()),
-            num_threads: num_threads(),
-            debug: std::env::var("MEDASR_DEBUG").is_ok(),
-            provider: Some("cpu".to_string()),
-            ..Default::default()
+            decoding_method: Some("greedy_search".to_string()),
+            ..OfflineRecognizerConfig::default()
         };
-        cfg.decoding_method = Some("greedy_search".to_string());
 
         let inner = OfflineRecognizer::create(&cfg).ok_or(AsrError::Init)?;
         let me = Self { inner };
@@ -104,8 +106,7 @@ impl Asr {
         }
         let started = Instant::now();
         let n = samples_16k_i16.len();
-        let audio_duration =
-            Duration::from_secs_f64(n as f64 / f64::from(TARGET_SAMPLE_RATE_HZ));
+        let audio_duration = Duration::from_secs_f64(n as f64 / f64::from(TARGET_SAMPLE_RATE_HZ));
 
         // i16 -> f32 in [-1, 1] via SecureBuffer<f32> so the conversion
         // stays mlock'd / zero-on-drop. (sherpa-onnx C API will copy this
@@ -126,9 +127,18 @@ impl Asr {
             .unwrap_or(1)
             .max(1);
         let peak_norm = f32::from(peak) / f32::from(i16::MAX);
-        let gain = if peak_norm >= 0.5 { 1.0 } else { 0.71 / peak_norm };
+        let gain = if peak_norm >= 0.5 {
+            1.0
+        } else {
+            0.71 / peak_norm
+        };
         let scale = gain / f32::from(i16::MAX);
-        debug!("normalising: peak {} ({:.0}%) -> gain {:.2}x", peak, peak_norm * 100.0, gain);
+        debug!(
+            "normalising: peak {} ({:.0}%) -> gain {:.2}x",
+            peak,
+            peak_norm * 100.0,
+            gain
+        );
         let mut f32_buf = SecureBuffer::<f32>::with_capacity(n);
         for (dst, &src) in f32_buf.as_mut_slice().iter_mut().zip(samples_16k_i16) {
             *dst = (f32::from(src) * scale).clamp(-1.0, 1.0);

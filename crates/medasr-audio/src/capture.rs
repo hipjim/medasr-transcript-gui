@@ -9,8 +9,8 @@
 //! Default-input-device is queried at recording start (not cached) so that
 //! a mic hot-swap between recordings is handled transparently.
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::Arc;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, SampleFormat, Stream, StreamConfig};
@@ -132,10 +132,16 @@ pub fn start_with_device(device: &InputDevice) -> Result<AudioCapture, CaptureEr
             let mut peak: f32 = 0.0;
             for &s in samples {
                 let a = s.abs();
-                if a > peak { peak = a; }
+                if a > peak {
+                    peak = a;
+                }
             }
             let prev = peak_clb.load(Ordering::Relaxed) as f32 / 10_000.0;
-            let smoothed = if peak > prev { peak } else { prev * 0.85 + peak * 0.15 };
+            let smoothed = if peak > prev {
+                peak
+            } else {
+                prev * 0.85 + peak * 0.15
+            };
             peak_clb.store((smoothed * 10_000.0) as u32, Ordering::Relaxed);
             push_into_ring(&mut producer, samples, &overflow_flag_clb);
         },
@@ -153,11 +159,7 @@ pub fn start_with_device(device: &InputDevice) -> Result<AudioCapture, CaptureEr
     })
 }
 
-fn push_into_ring(
-    producer: &mut Producer<f32>,
-    samples: &[f32],
-    overflow_flag: &AtomicBool,
-) {
+fn push_into_ring(producer: &mut Producer<f32>, samples: &[f32], overflow_flag: &AtomicBool) {
     for &s in samples {
         if producer.push(s).is_err() {
             // Full — orchestrator has not drained fast enough. We drop the
@@ -180,12 +182,7 @@ fn build_stream(
     };
     let stream = match fmt {
         SampleFormat::F32 => device
-            .build_input_stream(
-                config,
-                move |data: &[f32], _| sink(data),
-                err_cb,
-                None,
-            )
+            .build_input_stream(config, move |data: &[f32], _| sink(data), err_cb, None)
             .map_err(|e| CaptureError::BuildStream(e.to_string()))?,
         SampleFormat::I16 => {
             let scale = 1.0 / f32::from(i16::MAX);

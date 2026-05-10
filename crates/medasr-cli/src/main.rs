@@ -65,10 +65,7 @@ fn main() {
     match cmd {
         "placeholder" => run_placeholder(),
         "placeholder-once" => {
-            let delay = args
-                .get(2)
-                .and_then(|s| s.parse::<u64>().ok())
-                .unwrap_or(5);
+            let delay = args.get(2).and_then(|s| s.parse::<u64>().ok()).unwrap_or(5);
             run_placeholder_once(Duration::from_secs(delay));
         }
         "dictate" => {
@@ -81,18 +78,21 @@ fn main() {
             };
             run_dictate(model_dir);
         }
-        "mics" => {
-            run_mics();
-            return;
-        }
+        "mics" => run_mics(),
         "wav" => {
             let model_dir = match args.get(2) {
                 Some(p) => PathBuf::from(p),
-                None => { eprintln!("error: wav requires <model-dir> <wav-file>.\n\n{HELP}"); std::process::exit(2); }
+                None => {
+                    eprintln!("error: wav requires <model-dir> <wav-file>.\n\n{HELP}");
+                    std::process::exit(2);
+                }
             };
             let wav_file = match args.get(3) {
                 Some(p) => PathBuf::from(p),
-                None => { eprintln!("error: wav requires <wav-file>.\n\n{HELP}"); std::process::exit(2); }
+                None => {
+                    eprintln!("error: wav requires <wav-file>.\n\n{HELP}");
+                    std::process::exit(2);
+                }
             };
             run_wav(model_dir, wav_file);
         }
@@ -177,7 +177,10 @@ fn run_mics() {
     let host = cpal::default_host();
     println!("host: {}", host.id().name());
     match host.default_input_device() {
-        Some(d) => println!("default input: {}", d.name().unwrap_or_else(|_| "<unnamed>".into())),
+        Some(d) => println!(
+            "default input: {}",
+            d.name().unwrap_or_else(|_| "<unnamed>".into())
+        ),
         None => println!("default input: <none>"),
     }
     println!();
@@ -186,8 +189,16 @@ fn run_mics() {
         Ok(it) => {
             for d in it {
                 let name = d.name().unwrap_or_else(|_| "<unnamed>".into());
-                let cfg = d.default_input_config()
-                    .map(|c| format!("{} Hz × {} ch ({:?})", c.sample_rate().0, c.channels(), c.sample_format()))
+                let cfg = d
+                    .default_input_config()
+                    .map(|c| {
+                        format!(
+                            "{} Hz × {} ch ({:?})",
+                            c.sample_rate().0,
+                            c.channels(),
+                            c.sample_format()
+                        )
+                    })
                     .unwrap_or_else(|e| format!("(no config: {e})"));
                 println!("  - {name:<40} {cfg}");
             }
@@ -201,10 +212,17 @@ fn run_wav(model_dir: PathBuf, wav_file: PathBuf) {
     use medasr_secure_buffer::SecureBuffer;
     use std::sync::mpsc;
 
-    info!("wav-mode: model={} wav={}", model_dir.display(), wav_file.display());
+    info!(
+        "wav-mode: model={} wav={}",
+        model_dir.display(),
+        wav_file.display()
+    );
     let mut reader = match hound::WavReader::open(&wav_file) {
         Ok(r) => r,
-        Err(e) => { error!("open wav: {e}"); std::process::exit(1); }
+        Err(e) => {
+            error!("open wav: {e}");
+            std::process::exit(1);
+        }
     };
     let spec = reader.spec();
     info!("wav spec: {:?}", spec);
@@ -227,20 +245,36 @@ fn run_wav(model_dir: PathBuf, wav_file: PathBuf) {
         spec.channels,
     ) {
         Ok(s) => s,
-        Err(e) => { error!("resample: {e}"); std::process::exit(1); }
+        Err(e) => {
+            error!("resample: {e}");
+            std::process::exit(1);
+        }
     };
-    info!("samples after resample: {} ({} ms @ 16 kHz)", samples_16k_i16.len(), samples_16k_i16.len() / 16);
+    info!(
+        "samples after resample: {} ({} ms @ 16 kHz)",
+        samples_16k_i16.len(),
+        samples_16k_i16.len() / 16
+    );
 
     let asr = match spawn_worker(ModelPaths::from_dir(&model_dir)) {
         Ok(a) => a,
-        Err(e) => { error!("asr init: {e:?}"); std::process::exit(1); }
+        Err(e) => {
+            error!("asr init: {e:?}");
+            std::process::exit(1);
+        }
     };
     let mut secure = SecureBuffer::<i16>::with_capacity(samples_16k_i16.len());
     secure.as_mut_slice().copy_from_slice(&samples_16k_i16);
 
     let cancel = tokio_util::sync::CancellationToken::new();
     let (tx, rx) = mpsc::channel();
-    asr.sender().send(AsrCommand::Transcribe { samples: secure, cancel, reply: tx }).unwrap();
+    asr.sender()
+        .send(AsrCommand::Transcribe {
+            samples: secure,
+            cancel,
+            reply: tx,
+        })
+        .unwrap();
     match rx.recv().unwrap() {
         Ok(r) => {
             println!("transcript: {:?}", r.text);
@@ -261,7 +295,10 @@ fn run_dictate(model_dir: PathBuf) {
     let mut orch = match medasr_lifecycle::orchestrator_build(&model_dir) {
         Ok(o) => o,
         Err(e) => {
-            error!("orchestrator init: {e}\n  Verify {} contains model.int8.onnx and tokens.txt.", model_dir.display());
+            error!(
+                "orchestrator init: {e}\n  Verify {} contains model.int8.onnx and tokens.txt.",
+                model_dir.display()
+            );
             std::process::exit(1);
         }
     };

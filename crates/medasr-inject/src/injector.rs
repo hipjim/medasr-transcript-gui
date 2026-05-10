@@ -25,10 +25,16 @@ pub struct Injector<B: KeystrokeBackend> {
 }
 
 impl<B: KeystrokeBackend> Injector<B> {
-    pub fn new(backend: B) -> Self { Self { backend } }
+    pub fn new(backend: B) -> Self {
+        Self { backend }
+    }
 
-    pub fn into_backend(self) -> B { self.backend }
-    pub fn backend_mut(&mut self) -> &mut B { &mut self.backend }
+    pub fn into_backend(self) -> B {
+        self.backend
+    }
+    pub fn backend_mut(&mut self) -> &mut B {
+        &mut self.backend
+    }
 
     /// Inject `text` according to `target.chunking_policy`. Native targets
     /// receive a single (or few) burst; VDI targets receive small chunks
@@ -57,8 +63,7 @@ impl<B: KeystrokeBackend> Injector<B> {
                 end += utf8_codepoint_len(bytes[end]);
                 chars += 1;
             }
-            let chunk = std::str::from_utf8(&bytes[start..end])
-                .expect("chunk on char boundary");
+            let chunk = std::str::from_utf8(&bytes[start..end]).expect("chunk on char boundary");
             self.backend.type_unicode_string(chunk)?;
             self.backend.flush()?;
             chunks_typed += 1;
@@ -70,7 +75,11 @@ impl<B: KeystrokeBackend> Injector<B> {
         Ok(())
     }
 
-    pub fn inject_with_policy(&mut self, text: &str, _policy: ChunkingPolicy) -> Result<(), InjectError> {
+    pub fn inject_with_policy(
+        &mut self,
+        text: &str,
+        _policy: ChunkingPolicy,
+    ) -> Result<(), InjectError> {
         // Convenience wrapper for tests / CLI; constructs a synthetic
         // FocusTarget with just the policy field that matters here.
         let dummy = FocusTarget {
@@ -141,7 +150,10 @@ mod tests {
         let probe = backend.clone();
         let mut inj = Injector::new(backend);
         // chunk_chars = 2; verifies multi-byte chars don't split.
-        let target = mk_target(ChunkingPolicy::Vdi { chunk_chars: 2, delay_ms: 0 });
+        let target = mk_target(ChunkingPolicy::Vdi {
+            chunk_chars: 2,
+            delay_ms: 0,
+        });
         // "× °" — 4-byte multi-byte chars.
         let text = "×°×°×°";
         inj.inject(text, &target).unwrap();
@@ -160,7 +172,8 @@ mod tests {
         let backend = FakeBackend::new();
         let probe = backend.clone();
         let mut inj = Injector::new(backend);
-        inj.inject("", &mk_target(ChunkingPolicy::native_default())).unwrap();
+        inj.inject("", &mk_target(ChunkingPolicy::native_default()))
+            .unwrap();
         assert_eq!(probe.call_count(), 0);
     }
 

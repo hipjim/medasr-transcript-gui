@@ -25,23 +25,23 @@ pub struct CommandsStage {
 }
 
 const COMMANDS: &[(&str, Replacement)] = &[
-    ("period",            Replacement::Punct(".")),
-    ("full stop",         Replacement::Punct(".")),
-    ("comma",             Replacement::Punct(",")),
-    ("colon",             Replacement::Punct(":")),
-    ("semicolon",         Replacement::Punct(";")),
-    ("question mark",     Replacement::Punct("?")),
+    ("period", Replacement::Punct(".")),
+    ("full stop", Replacement::Punct(".")),
+    ("comma", Replacement::Punct(",")),
+    ("colon", Replacement::Punct(":")),
+    ("semicolon", Replacement::Punct(";")),
+    ("question mark", Replacement::Punct("?")),
     ("exclamation point", Replacement::Punct("!")),
-    ("exclamation mark",  Replacement::Punct("!")),
-    ("new line",          Replacement::Plain("\n")),
-    ("new paragraph",     Replacement::Plain("\n\n")),
-    ("open paren",        Replacement::OpenBracket("(")),
-    ("close paren",       Replacement::CloseBracket(")")),
-    ("open bracket",      Replacement::OpenBracket("[")),
-    ("close bracket",     Replacement::CloseBracket("]")),
-    ("open quote",        Replacement::OpenQuote),
-    ("close quote",       Replacement::CloseQuote),
-    ("dash",              Replacement::Punct("—")),
+    ("exclamation mark", Replacement::Punct("!")),
+    ("new line", Replacement::Plain("\n")),
+    ("new paragraph", Replacement::Plain("\n\n")),
+    ("open paren", Replacement::OpenBracket("(")),
+    ("close paren", Replacement::CloseBracket(")")),
+    ("open bracket", Replacement::OpenBracket("[")),
+    ("close bracket", Replacement::CloseBracket("]")),
+    ("open quote", Replacement::OpenQuote),
+    ("close quote", Replacement::CloseQuote),
+    ("dash", Replacement::Punct("—")),
 ];
 
 #[derive(Clone, Copy)]
@@ -78,7 +78,9 @@ impl Stage for CommandsStage {
             let mut matched = None;
             // Try 2-word, then 1-word matches.
             for window in (1..=2).rev() {
-                if i + window > tokens.len() { continue; }
+                if i + window > tokens.len() {
+                    continue;
+                }
                 let phrase = tokens[i..i + window].join(" ").to_ascii_lowercase();
                 if let Some(repl) = lookup(&phrase) {
                     matched = Some((window, repl));
@@ -89,7 +91,8 @@ impl Stage for CommandsStage {
                 emit(&mut buf, repl, &mut quote_open);
                 i += win;
             } else {
-                if !buf.is_empty() && !buf.ends_with(|c: char| c.is_whitespace())
+                if !buf.is_empty()
+                    && !buf.ends_with(|c: char| c.is_whitespace())
                     && needs_leading_space(&buf, tokens[i])
                 {
                     buf.push(' ');
@@ -102,12 +105,16 @@ impl Stage for CommandsStage {
         // Replace the loop-local tokens vec to release the borrow on input
         // before writing to `out`. (lint clean-up.)
         tokens.clear();
-        out.push_str(buf.trim_start_matches(|c: char| c == ' '));
+        out.push_str(buf.trim_start_matches(' '));
     }
 }
 
 fn lookup(phrase: &str) -> Option<Replacement> {
-    for &(k, v) in COMMANDS { if k == phrase { return Some(v); } }
+    for &(k, v) in COMMANDS {
+        if k == phrase {
+            return Some(v);
+        }
+    }
     None
 }
 
@@ -119,7 +126,10 @@ fn unwrap_brace_tokens(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     let mut chars = input.char_indices().peekable();
     while let Some((i, c)) = chars.next() {
-        if c != '{' { out.push(c); continue; }
+        if c != '{' {
+            out.push(c);
+            continue;
+        }
         // Find the matching '}'. Bound the search at 32 chars to keep this
         // cheap and avoid pathological inputs.
         let rest = &input[i + 1..];
@@ -131,7 +141,9 @@ fn unwrap_brace_tokens(input: &str) -> String {
                     // Advance the iterator past the close brace.
                     let target = i + 1 + close + 1;
                     while let Some(&(j, _)) = chars.peek() {
-                        if j >= target { break; }
+                        if j >= target {
+                            break;
+                        }
                         chars.next();
                     }
                     continue;
@@ -146,9 +158,13 @@ fn unwrap_brace_tokens(input: &str) -> String {
 fn needs_leading_space(buf: &str, _next: &str) -> bool {
     if let Some(last) = buf.chars().last() {
         // After "(" or "[" or "\n", no leading space.
-        if last == '(' || last == '[' || last == '\n' { return false; }
+        if last == '(' || last == '[' || last == '\n' {
+            return false;
+        }
         // After a quote we just opened, no leading space.
-        if last == '"' { return false; }
+        if last == '"' {
+            return false;
+        }
         return true;
     }
     false
@@ -158,7 +174,9 @@ fn emit(buf: &mut String, repl: Replacement, quote_open: &mut bool) {
     match repl {
         Replacement::Punct(s) => {
             // Strip any trailing space before the punctuation.
-            while buf.ends_with(' ') { buf.pop(); }
+            while buf.ends_with(' ') {
+                buf.pop();
+            }
             buf.push_str(s);
         }
         Replacement::Plain(s) => buf.push_str(s),
@@ -169,7 +187,9 @@ fn emit(buf: &mut String, repl: Replacement, quote_open: &mut bool) {
             buf.push_str(s);
         }
         Replacement::CloseBracket(s) => {
-            while buf.ends_with(' ') { buf.pop(); }
+            while buf.ends_with(' ') {
+                buf.pop();
+            }
             buf.push_str(s);
         }
         Replacement::OpenQuote => {
@@ -180,7 +200,9 @@ fn emit(buf: &mut String, repl: Replacement, quote_open: &mut bool) {
             *quote_open = true;
         }
         Replacement::CloseQuote => {
-            while buf.ends_with(' ') { buf.pop(); }
+            while buf.ends_with(' ') {
+                buf.pop();
+            }
             buf.push('"');
             *quote_open = false;
         }
@@ -204,8 +226,10 @@ mod tests {
 
     #[test]
     fn comma_then_word() {
-        assert_eq!(run("there is comma additionally a finding"),
-                   "there is, additionally a finding");
+        assert_eq!(
+            run("there is comma additionally a finding"),
+            "there is, additionally a finding"
+        );
     }
 
     #[test]

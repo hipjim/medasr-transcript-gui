@@ -37,25 +37,31 @@ impl Stage for CapsStage {
                 at_sentence_start = true;
             } else {
                 out.push(c);
-                if at_sentence_start { at_sentence_start = false; }
+                if at_sentence_start {
+                    at_sentence_start = false;
+                }
             }
             prev_char = Some(c);
         }
         // Standalone "i" -> "I". Done as a second pass for clarity.
         let pass1 = std::mem::take(out);
-        let mut tokens = pass1.split(' ').peekable();
         let mut first = true;
-        while let Some(tok) = tokens.next() {
-            if !first { out.push(' '); }
+        for tok in pass1.split(' ') {
+            if !first {
+                out.push(' ');
+            }
             first = false;
-            if tok == "i" { out.push('I'); }
-            else if tok.starts_with("i'") {
+            if tok == "i" {
+                out.push('I');
+            } else if tok.starts_with("i'") {
                 let mut chars = tok.chars();
-                if let Some(_) = chars.next() {
+                if chars.next().is_some() {
                     out.push('I');
                     out.extend(chars);
                 }
-            } else { out.push_str(tok); }
+            } else {
+                out.push_str(tok);
+            }
         }
     }
 }
@@ -66,7 +72,7 @@ mod tests {
 
     fn run(s: &str) -> String {
         let mut out = String::new();
-        CapsStage::default().apply(s, &mut out);
+        CapsStage.apply(s, &mut out);
         out
     }
 

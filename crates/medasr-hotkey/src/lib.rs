@@ -10,7 +10,7 @@
 
 use std::sync::mpsc;
 
-use livesplit_hotkey::{Hook, KeyCode, Hotkey};
+use livesplit_hotkey::{Hook, Hotkey, KeyCode};
 use thiserror::Error;
 use tracing::info;
 

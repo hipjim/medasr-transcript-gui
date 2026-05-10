@@ -14,9 +14,9 @@ mod fake;
 mod injector;
 pub mod secure_input;
 
-pub use backend::{KeystrokeBackend, BackendError};
+pub use backend::{BackendError, KeystrokeBackend};
 pub use fake::FakeBackend;
-pub use injector::{Injector, InjectError};
+pub use injector::{InjectError, Injector};
 
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 mod enigo_backend;

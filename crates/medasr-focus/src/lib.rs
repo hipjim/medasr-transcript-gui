@@ -34,8 +34,8 @@ pub fn capture() -> Result<FocusTarget, FocusError> {
     if is_wayland_session() {
         return Err(FocusError::WaylandUnsupported);
     }
-    let win = active_win_pos_rs::get_active_window()
-        .map_err(|e| FocusError::Probe(format!("{e:?}")))?;
+    let win =
+        active_win_pos_rs::get_active_window().map_err(|e| FocusError::Probe(format!("{e:?}")))?;
 
     let bundle_id = win.app_name.clone();
     let policy = policy_for_bundle(&bundle_id);
@@ -45,7 +45,9 @@ pub fn capture() -> Result<FocusTarget, FocusError> {
         os_window_id: win.window_id.parse::<u64>().unwrap_or(0),
         foreground_window_id: win.window_id.parse::<u64>().unwrap_or(0),
         process_id: u32::try_from(win.process_id).unwrap_or(0),
-        secondary_identity: secondary_identity_for_process(u32::try_from(win.process_id).unwrap_or(0)),
+        secondary_identity: secondary_identity_for_process(
+            u32::try_from(win.process_id).unwrap_or(0),
+        ),
         bundle_id_hash: bundle_hash,
         chunking_policy: policy,
     })
@@ -80,7 +82,9 @@ fn is_wayland_session() -> bool {
             .unwrap_or(false)
     }
     #[cfg(not(target_os = "linux"))]
-    { false }
+    {
+        false
+    }
 }
 
 /// Apps known to host VDI / remote-desktop windows that need slow chunked
@@ -88,10 +92,15 @@ fn is_wayland_session() -> bool {
 /// natural ID format.
 fn policy_for_bundle(bundle: &str) -> ChunkingPolicy {
     let lower = bundle.to_ascii_lowercase();
-    if lower.contains("citrix") || lower.contains("wfica") || lower.contains("ica")
-        || lower.contains("vmware horizon") || lower.contains("vmware-view")
-        || lower.contains("microsoft remote desktop") || lower.contains("mstsc")
-        || lower.contains("avd") || lower.contains("rdclient")
+    if lower.contains("citrix")
+        || lower.contains("wfica")
+        || lower.contains("ica")
+        || lower.contains("vmware horizon")
+        || lower.contains("vmware-view")
+        || lower.contains("microsoft remote desktop")
+        || lower.contains("mstsc")
+        || lower.contains("avd")
+        || lower.contains("rdclient")
     {
         ChunkingPolicy::vdi_default()
     } else {

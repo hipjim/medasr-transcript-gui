@@ -12,10 +12,7 @@ fn run(input: &str) -> String {
 
 #[test]
 fn radiology_clear_lungs() {
-    assert_eq!(
-        run("the lungs are clear period"),
-        "The lungs are clear."
-    );
+    assert_eq!(run("the lungs are clear period"), "The lungs are clear.");
 }
 
 #[test]

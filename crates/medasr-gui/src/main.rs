@@ -52,7 +52,9 @@ enum Status {
     },
     Verifying,
     Idle,
-    Recording { started: Instant },
+    Recording {
+        started: Instant,
+    },
     Transcribing,
     Error(String),
 }
@@ -81,7 +83,11 @@ enum WorkerMsg {
     },
     Error(String),
     /// First-run download progress.
-    DlProgress { file: String, downloaded: u64, total: Option<u64> },
+    DlProgress {
+        file: String,
+        downloaded: u64,
+        total: Option<u64>,
+    },
     DlVerifying,
     DlComplete(PathBuf),
     DlError(String),
@@ -143,7 +149,9 @@ impl App {
         let line = s.into();
         tracing::info!("{line}");
         self.log.push(line);
-        if self.log.len() > 200 { self.log.drain(..self.log.len() - 200); }
+        if self.log.len() > 200 {
+            self.log.drain(..self.log.len() - 200);
+        }
     }
 
     fn load_model(&mut self, dir: PathBuf) {
@@ -174,8 +182,13 @@ impl App {
         let pipeline_clone = self.pipeline_clone();
         let (tx, rx) = mpsc::channel();
         self.rx = Some(rx);
-        self.status = Status::Recording { started: Instant::now() };
-        self.log_line(format!("recording for {RECORD_SECS} s on {}...", device.name));
+        self.status = Status::Recording {
+            started: Instant::now(),
+        };
+        self.log_line(format!(
+            "recording for {RECORD_SECS} s on {}...",
+            device.name
+        ));
         let peak_share = Arc::new(std::sync::atomic::AtomicU32::new(0));
         let peak_for_worker = Arc::clone(&peak_share);
         self.live_peak = Some(peak_share);
@@ -185,12 +198,20 @@ impl App {
             let res = record_and_transcribe(
                 asr,
                 pipeline_clone,
-                RecordSource::LiveTimed { secs: RECORD_SECS, device, peak: peak_for_worker },
+                RecordSource::LiveTimed {
+                    secs: RECORD_SECS,
+                    device,
+                    peak: peak_for_worker,
+                },
                 denoise,
             );
             match res {
-                Ok(msg) => { let _ = tx.send(msg); }
-                Err(e) => { let _ = tx.send(WorkerMsg::Error(format!("{e}"))); }
+                Ok(msg) => {
+                    let _ = tx.send(msg);
+                }
+                Err(e) => {
+                    let _ = tx.send(WorkerMsg::Error(e.to_string()));
+                }
             }
         });
     }
@@ -204,7 +225,9 @@ impl App {
         let pipeline_clone = self.pipeline_clone();
         let (tx, rx) = mpsc::channel();
         self.rx = Some(rx);
-        self.status = Status::Recording { started: Instant::now() };
+        self.status = Status::Recording {
+            started: Instant::now(),
+        };
         self.log_line(format!("push-to-talk: recording on {}...", device.name));
         let stop = Arc::new(AtomicBool::new(false));
         let stop_for_worker = Arc::clone(&stop);
@@ -225,8 +248,12 @@ impl App {
                 denoise,
             );
             match res {
-                Ok(msg) => { let _ = tx.send(msg); }
-                Err(e) => { let _ = tx.send(WorkerMsg::Error(format!("{e}"))); }
+                Ok(msg) => {
+                    let _ = tx.send(msg);
+                }
+                Err(e) => {
+                    let _ = tx.send(WorkerMsg::Error(e.to_string()));
+                }
             }
         });
         Some(stop)
@@ -248,21 +275,22 @@ impl App {
         let denoise = self.enable_noise_subtraction;
 
         thread::spawn(move || {
-            let res = record_and_transcribe(
-                asr,
-                pipeline_clone,
-                RecordSource::Wav(path),
-                denoise,
-            );
+            let res = record_and_transcribe(asr, pipeline_clone, RecordSource::Wav(path), denoise);
             match res {
-                Ok(msg) => { let _ = tx.send(msg); }
-                Err(e) => { let _ = tx.send(WorkerMsg::Error(format!("{e}"))); }
+                Ok(msg) => {
+                    let _ = tx.send(msg);
+                }
+                Err(e) => {
+                    let _ = tx.send(WorkerMsg::Error(e.to_string()));
+                }
             }
         });
     }
 
     /// Pipeline isn't Clone; build a fresh default for each job.
-    fn pipeline_clone(&self) -> Pipeline { default_pipeline() }
+    fn pipeline_clone(&self) -> Pipeline {
+        default_pipeline()
+    }
 
     fn poll_worker(&mut self) {
         let Some(rx) = self.rx.as_ref() else { return };
@@ -287,8 +315,16 @@ impl App {
                     self.rx = None;
                     return;
                 }
-                Ok(WorkerMsg::DlProgress { file, downloaded, total }) => {
-                    self.status = Status::Downloading { file, downloaded, total };
+                Ok(WorkerMsg::DlProgress {
+                    file,
+                    downloaded,
+                    total,
+                }) => {
+                    self.status = Status::Downloading {
+                        file,
+                        downloaded,
+                        total,
+                    };
                     // keep draining
                 }
                 Ok(WorkerMsg::DlVerifying) => {
@@ -331,7 +367,10 @@ impl App {
         let (tx, rx) = mpsc::channel();
         self.rx = Some(rx);
         self.status = Status::Downloading {
-            file: medasr_model::MANIFEST.first().map(|f| f.path.into()).unwrap_or_default(),
+            file: medasr_model::MANIFEST
+                .first()
+                .map(|f| f.path.into())
+                .unwrap_or_default(),
             downloaded: 0,
             total: None,
         };
@@ -359,7 +398,10 @@ impl App {
 }
 
 fn run_download(dest: PathBuf, tx: mpsc::Sender<WorkerMsg>) {
-    let rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
         Ok(r) => r,
         Err(e) => {
             let _ = tx.send(WorkerMsg::DlError(format!("tokio: {e}")));
@@ -405,7 +447,11 @@ fn run_download(dest: PathBuf, tx: mpsc::Sender<WorkerMsg>) {
 
 enum RecordSource {
     /// Record for a fixed number of seconds.
-    LiveTimed { secs: u64, device: InputDevice, peak: Arc<std::sync::atomic::AtomicU32> },
+    LiveTimed {
+        secs: u64,
+        device: InputDevice,
+        peak: Arc<std::sync::atomic::AtomicU32>,
+    },
     /// Record until `stop` flips to true, capped at `max_secs`.
     LivePtt {
         stop: Arc<AtomicBool>,
@@ -424,7 +470,8 @@ fn record_and_transcribe(
 ) -> Result<WorkerMsg, String> {
     let resampled: Vec<i16> = match source {
         RecordSource::LiveTimed { secs, device, peak } => {
-            let mut capture = start_with_device(&device).map_err(|e| format!("audio start: {e:?}"))?;
+            let mut capture =
+                start_with_device(&device).map_err(|e| format!("audio start: {e:?}"))?;
             let cfg = capture.config;
             // Mirror cpal's peak-meter into the GUI's shared atomic.
             let peak_src = Arc::clone(&capture.peak_centi_pct);
@@ -448,15 +495,20 @@ fn record_and_transcribe(
             resample_to_16k_mono(&raw, cfg.sample_rate, cfg.channels)
                 .map_err(|e| format!("resample: {e}"))?
         }
-        RecordSource::LivePtt { stop, max_secs, device, peak } => {
-            let mut capture = start_with_device(&device).map_err(|e| format!("audio start: {e:?}"))?;
+        RecordSource::LivePtt {
+            stop,
+            max_secs,
+            device,
+            peak,
+        } => {
+            let mut capture =
+                start_with_device(&device).map_err(|e| format!("audio start: {e:?}"))?;
             let cfg = capture.config;
             let peak_src = Arc::clone(&capture.peak_centi_pct);
             let started = Instant::now();
             let cap = Duration::from_secs(max_secs);
-            let mut raw: Vec<f32> = Vec::with_capacity(
-                cfg.sample_rate as usize * cfg.channels as usize * 2,
-            );
+            let mut raw: Vec<f32> =
+                Vec::with_capacity(cfg.sample_rate as usize * cfg.channels as usize * 2);
             while !stop.load(Ordering::Relaxed) && started.elapsed() < cap {
                 while let Ok(s) = capture.consumer.pop() {
                     raw.push(s);
@@ -473,8 +525,7 @@ fn record_and_transcribe(
                 .map_err(|e| format!("resample: {e}"))?
         }
         RecordSource::Wav(path) => {
-            let mut reader = hound::WavReader::open(&path)
-                .map_err(|e| format!("open wav: {e}"))?;
+            let mut reader = hound::WavReader::open(&path).map_err(|e| format!("open wav: {e}"))?;
             let spec = reader.spec();
             let samples_native: Vec<f32> = match spec.sample_format {
                 hound::SampleFormat::Int => reader
@@ -485,10 +536,9 @@ fn record_and_transcribe(
                         s as f32 / max as f32
                     })
                     .collect(),
-                hound::SampleFormat::Float => reader
-                    .samples::<f32>()
-                    .filter_map(|r| r.ok())
-                    .collect(),
+                hound::SampleFormat::Float => {
+                    reader.samples::<f32>().filter_map(|r| r.ok()).collect()
+                }
             };
             resample_to_16k_mono(&samples_native, spec.sample_rate, spec.channels)
                 .map_err(|e| format!("resample: {e}"))?
@@ -516,7 +566,11 @@ fn record_and_transcribe(
 
     // 3. Trim silence at head + tail.
     let trimmed = trim_silence(&denoised, 0.005, 400);
-    let trimmed = if trimmed.is_empty() { denoised } else { trimmed };
+    let trimmed = if trimmed.is_empty() {
+        denoised
+    } else {
+        trimmed
+    };
 
     // 4. RMS-normalize to MedASR's training-distribution sweet spot.
     let leveled = rms_normalize(&trimmed, -20.0);
@@ -553,7 +607,11 @@ fn record_and_transcribe(
     let cancel = CancellationToken::new();
     let (reply_tx, reply_rx) = mpsc::channel();
     asr_tx
-        .send(AsrCommand::Transcribe { samples: secure, cancel, reply: reply_tx })
+        .send(AsrCommand::Transcribe {
+            samples: secure,
+            cancel,
+            reply: reply_tx,
+        })
         .map_err(|_| "asr worker channel closed".to_string())?;
 
     let inference_started = Instant::now();
@@ -619,7 +677,9 @@ impl eframe::App for App {
                 let (label, color) = match &self.status {
                     Status::NoModel => ("⊘ no model", Color32::GRAY),
                     Status::EulaPending => ("⚠ eula pending", Color32::from_rgb(220, 160, 60)),
-                    Status::Downloading { .. } => ("↓ downloading model", Color32::from_rgb(120, 180, 220)),
+                    Status::Downloading { .. } => {
+                        ("↓ downloading model", Color32::from_rgb(120, 180, 220))
+                    }
                     Status::Verifying => ("· verifying", Color32::from_rgb(120, 180, 220)),
                     Status::Idle => ("● ready", Color32::from_rgb(80, 180, 80)),
                     Status::Recording { started } => {
@@ -661,11 +721,23 @@ impl eframe::App for App {
                             .weak(),
                     );
                     ui.add_space(14.0);
-                    if ui.add(egui::Button::new("⬇  Get the model (≈ 150 MB from Hugging Face)").min_size(egui::vec2(360.0, 36.0))).clicked() {
+                    if ui
+                        .add(
+                            egui::Button::new("⬇  Get the model (≈ 150 MB from Hugging Face)")
+                                .min_size(egui::vec2(360.0, 36.0)),
+                        )
+                        .clicked()
+                    {
                         self.status = Status::EulaPending;
                     }
                     ui.add_space(8.0);
-                    if ui.add(egui::Button::new("📁  I already have the model — pick a folder…").min_size(egui::vec2(360.0, 36.0))).clicked() {
+                    if ui
+                        .add(
+                            egui::Button::new("📁  I already have the model — pick a folder…")
+                                .min_size(egui::vec2(360.0, 36.0)),
+                        )
+                        .clicked()
+                    {
                         if let Some(dir) = rfd::FileDialog::new().pick_folder() {
                             self.load_model(dir);
                         }
@@ -691,7 +763,13 @@ impl eframe::App for App {
                     });
                 ui.separator();
                 ui.horizontal(|ui| {
-                    if ui.add(egui::Button::new("✓ Accept & download").min_size(egui::vec2(180.0, 32.0))).clicked() {
+                    if ui
+                        .add(
+                            egui::Button::new("✓ Accept & download")
+                                .min_size(egui::vec2(180.0, 32.0)),
+                        )
+                        .clicked()
+                    {
                         self.accept_eula();
                     }
                     if ui.button("✕ Decline").clicked() {
@@ -702,7 +780,12 @@ impl eframe::App for App {
             }
 
             // Download progress.
-            if let Status::Downloading { file, downloaded, total } = self.status.clone() {
+            if let Status::Downloading {
+                file,
+                downloaded,
+                total,
+            } = self.status.clone()
+            {
                 ui.vertical_centered(|ui| {
                     ui.add_space(40.0);
                     ui.heading("Downloading MedASR model");
@@ -718,9 +801,17 @@ impl eframe::App for App {
                         Some(t) => format!("{:.1} / {:.1} MB", mb, t as f64 / 1_048_576.0),
                         None => format!("{mb:.1} MB"),
                     };
-                    ui.add(egui::ProgressBar::new(frac).desired_width(360.0).text(label));
+                    ui.add(
+                        egui::ProgressBar::new(frac)
+                            .desired_width(360.0)
+                            .text(label),
+                    );
                     ui.add_space(20.0);
-                    ui.label(RichText::new("Downloads to your OS cache directory.").weak().small());
+                    ui.label(
+                        RichText::new("Downloads to your OS cache directory.")
+                            .weak()
+                            .small(),
+                    );
                 });
                 ctx.request_repaint_after(Duration::from_millis(100));
                 return;
@@ -731,7 +822,9 @@ impl eframe::App for App {
                     ui.add_space(40.0);
                     ui.heading("Verifying download");
                     ui.add_space(8.0);
-                    ui.label(RichText::new("Checking SHA-256 against the bundled manifest…").weak());
+                    ui.label(
+                        RichText::new("Checking SHA-256 against the bundled manifest…").weak(),
+                    );
                     ui.add_space(20.0);
                     ui.spinner();
                 });
@@ -743,12 +836,23 @@ impl eframe::App for App {
             let busy = matches!(self.status, Status::Recording { .. } | Status::Transcribing);
             ui.horizontal(|ui| {
                 ui.label("Input:");
-                let current = self.selected_device.clone().unwrap_or_else(|| "<none>".into());
+                let current = self
+                    .selected_device
+                    .clone()
+                    .unwrap_or_else(|| "<none>".into());
                 let mut new_selection: Option<String> = None;
-                let combo = egui::ComboBox::from_id_salt("input-device").selected_text(current.clone()).width(280.0);
+                let combo = egui::ComboBox::from_id_salt("input-device")
+                    .selected_text(current.clone())
+                    .width(280.0);
                 combo.show_ui(ui, |ui| {
                     for d in &self.devices {
-                        if ui.selectable_label(self.selected_device.as_deref() == Some(&d.name), &d.name).clicked() {
+                        if ui
+                            .selectable_label(
+                                self.selected_device.as_deref() == Some(&d.name),
+                                &d.name,
+                            )
+                            .clicked()
+                        {
                             new_selection = Some(d.name.clone());
                         }
                     }
@@ -773,16 +877,25 @@ impl eframe::App for App {
             } else {
                 self.last_peak_pct = (self.last_peak_pct * 0.6 + peak * 0.4).max(0.0);
             }
-            let bar_color = if self.last_peak_pct < 0.05 { Color32::from_rgb(120, 120, 120) }
-                else if self.last_peak_pct < 0.5 { Color32::from_rgb(80, 180, 80) }
-                else if self.last_peak_pct < 0.85 { Color32::from_rgb(220, 200, 60) }
-                else { Color32::from_rgb(220, 80, 80) };
+            let bar_color = if self.last_peak_pct < 0.05 {
+                Color32::from_rgb(120, 120, 120)
+            } else if self.last_peak_pct < 0.5 {
+                Color32::from_rgb(80, 180, 80)
+            } else if self.last_peak_pct < 0.85 {
+                Color32::from_rgb(220, 200, 60)
+            } else {
+                Color32::from_rgb(220, 80, 80)
+            };
             ui.horizontal(|ui| {
                 ui.label("Mic:");
                 let bar = egui::ProgressBar::new(self.last_peak_pct)
                     .desired_width(280.0)
                     .fill(bar_color)
-                    .text(format!("{:.0}% ({:.0} dBFS)", self.last_peak_pct * 100.0, dbfs_from(self.last_peak_pct)));
+                    .text(format!(
+                        "{:.0}% ({:.0} dBFS)",
+                        self.last_peak_pct * 100.0,
+                        dbfs_from(self.last_peak_pct)
+                    ));
                 ui.add(bar);
             });
 
@@ -791,15 +904,36 @@ impl eframe::App for App {
             // Action row.
             ui.horizontal(|ui| {
                 let record_label = format!("🎤 Record {RECORD_SECS} s");
-                if ui.add_enabled(!busy, egui::Button::new(record_label).min_size(egui::vec2(150.0, 32.0))).clicked() {
+                if ui
+                    .add_enabled(
+                        !busy,
+                        egui::Button::new(record_label).min_size(egui::vec2(150.0, 32.0)),
+                    )
+                    .clicked()
+                {
                     self.start_record();
                 }
-                if ui.add_enabled(!busy, egui::Button::new("📁 Open WAV…").min_size(egui::vec2(120.0, 32.0))).clicked() {
-                    if let Some(path) = rfd::FileDialog::new().add_filter("wav", &["wav"]).pick_file() {
+                if ui
+                    .add_enabled(
+                        !busy,
+                        egui::Button::new("📁 Open WAV…").min_size(egui::vec2(120.0, 32.0)),
+                    )
+                    .clicked()
+                {
+                    if let Some(path) = rfd::FileDialog::new()
+                        .add_filter("wav", &["wav"])
+                        .pick_file()
+                    {
                         self.open_wav(path);
                     }
                 }
-                if ui.add_enabled(!busy, egui::Button::new("Clear").min_size(egui::vec2(60.0, 32.0))).clicked() {
+                if ui
+                    .add_enabled(
+                        !busy,
+                        egui::Button::new("Clear").min_size(egui::vec2(60.0, 32.0)),
+                    )
+                    .clicked()
+                {
                     self.transcript_raw.clear();
                     self.transcript_post.clear();
                 }
@@ -831,7 +965,11 @@ impl eframe::App for App {
                     stat_chip(ui, "snr", &format!("{:.1} dB", s.snr_db));
                     stat_chip(ui, "wpm", &format!("{:.0} ({} words)", s.wpm, s.word_count));
                     if s.noise_subtracted {
-                        ui.label(RichText::new("• denoised").color(Color32::from_rgb(120, 180, 220)).small());
+                        ui.label(
+                            RichText::new("• denoised")
+                                .color(Color32::from_rgb(120, 180, 220))
+                                .small(),
+                        );
                     }
                 });
                 ui.add_space(4.0);
@@ -916,7 +1054,10 @@ fn main() -> eframe::Result<()> {
         viewport = viewport.with_icon(icon);
     }
 
-    let opts = eframe::NativeOptions { viewport, ..Default::default() };
+    let opts = eframe::NativeOptions {
+        viewport,
+        ..Default::default()
+    };
     eframe::run_native("MedASR", opts, Box::new(|_cc| Ok(Box::new(app))))
 }
 
@@ -940,7 +1081,11 @@ fn dirs_home() -> Option<PathBuf> {
 }
 
 fn dbfs_from(linear: f32) -> f32 {
-    if linear <= f32::EPSILON { -100.0 } else { 20.0 * linear.log10() }
+    if linear <= f32::EPSILON {
+        -100.0
+    } else {
+        20.0 * linear.log10()
+    }
 }
 
 fn stat_chip(ui: &mut egui::Ui, label: &str, value: &str) {

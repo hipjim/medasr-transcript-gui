@@ -83,11 +83,15 @@ impl<T: Zeroize> SecureBuffer<T> {
 
 impl<T: Zeroize> Deref for SecureBuffer<T> {
     type Target = [T];
-    fn deref(&self) -> &[T] { &self.data }
+    fn deref(&self) -> &[T] {
+        &self.data
+    }
 }
 
 impl<T: Zeroize> DerefMut for SecureBuffer<T> {
-    fn deref_mut(&mut self) -> &mut [T] { &mut self.data }
+    fn deref_mut(&mut self) -> &mut [T] {
+        &mut self.data
+    }
 }
 
 impl<T: Zeroize> Drop for SecureBuffer<T> {
@@ -110,7 +114,11 @@ fn pin<T>(buf: &mut [T]) -> PinStatus {
     let bytes = std::mem::size_of_val(buf);
     // SAFETY: pointer + length come from a live slice.
     let rc = unsafe { libc::mlock(buf.as_ptr().cast(), bytes) };
-    if rc == 0 { PinStatus::Pinned } else { PinStatus::PinFailed }
+    if rc == 0 {
+        PinStatus::Pinned
+    } else {
+        PinStatus::PinFailed
+    }
 }
 
 #[cfg(unix)]
@@ -133,7 +141,11 @@ fn pin<T>(buf: &mut [T]) -> PinStatus {
     // SAFETY: pointer + length come from a live slice.
     // VirtualLock returns Result<()> in windows-rs 0.59+.
     let rc = unsafe { VirtualLock(buf.as_ptr().cast::<core::ffi::c_void>().cast_mut(), bytes) };
-    if rc.is_ok() { PinStatus::Pinned } else { PinStatus::PinFailed }
+    if rc.is_ok() {
+        PinStatus::Pinned
+    } else {
+        PinStatus::PinFailed
+    }
 }
 
 #[cfg(windows)]
@@ -144,7 +156,9 @@ fn unpin<T>(buf: &mut [T]) {
     }
     let bytes = std::mem::size_of_val(buf);
     // SAFETY: matches the address we VirtualLock'd in `pin`.
-    unsafe { let _ = VirtualUnlock(buf.as_ptr().cast::<core::ffi::c_void>().cast_mut(), bytes); }
+    unsafe {
+        let _ = VirtualUnlock(buf.as_ptr().cast::<core::ffi::c_void>().cast_mut(), bytes);
+    }
 }
 
 // ---------------------------------------------------------------------

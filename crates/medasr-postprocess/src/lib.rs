@@ -42,8 +42,8 @@ pub use strip_tags::StripTagsStage;
 #[must_use]
 pub fn default_pipeline() -> Pipeline {
     Pipeline::new()
-        .with(StripTagsStage::default())
+        .with(StripTagsStage)
         .with(CommandsStage::default())
-        .with(NumbersStage::default())
-        .with(CapsStage::default())
+        .with(NumbersStage)
+        .with(CapsStage)
 }

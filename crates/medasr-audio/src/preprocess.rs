@@ -24,7 +24,9 @@ use rustfft::{Fft, FftPlanner};
 /// killing rumble).
 #[must_use]
 pub fn high_pass_filter(samples_16k: &[i16], cutoff_hz: f32) -> Vec<i16> {
-    if samples_16k.is_empty() { return Vec::new(); }
+    if samples_16k.is_empty() {
+        return Vec::new();
+    }
     // RC high-pass:  y[n] = α (y[n-1] + x[n] − x[n-1])
     // with α = RC / (RC + dt), RC = 1 / (2π f_c), dt = 1 / sample_rate.
     let dt = 1.0_f32 / TARGET_SAMPLE_RATE_HZ as f32;
@@ -56,20 +58,27 @@ pub fn high_pass_filter(samples_16k: &[i16], cutoff_hz: f32) -> Vec<i16> {
 /// slice (caller should treat as NoSpeech).
 #[must_use]
 pub fn trim_silence(samples_16k: &[i16], threshold: f32, margin_ms: u32) -> Vec<i16> {
-    if samples_16k.is_empty() { return Vec::new(); }
+    if samples_16k.is_empty() {
+        return Vec::new();
+    }
     let frame_len = (TARGET_SAMPLE_RATE_HZ as usize * 20) / 1000; // 20 ms
     let scale = f32::from(i16::MAX);
 
     let mut first_voiced: Option<usize> = None;
     let mut last_voiced: Option<usize> = None;
     for (idx, chunk) in samples_16k.chunks(frame_len).enumerate() {
-        let sum_sq: f64 = chunk.iter().map(|&s| {
-            let n = f32::from(s) / scale;
-            f64::from(n * n)
-        }).sum();
+        let sum_sq: f64 = chunk
+            .iter()
+            .map(|&s| {
+                let n = f32::from(s) / scale;
+                f64::from(n * n)
+            })
+            .sum();
         let rms = ((sum_sq / chunk.len() as f64).sqrt()) as f32;
         if rms >= threshold {
-            if first_voiced.is_none() { first_voiced = Some(idx); }
+            if first_voiced.is_none() {
+                first_voiced = Some(idx);
+            }
             last_voiced = Some(idx);
         }
     }
@@ -89,22 +98,32 @@ pub fn trim_silence(samples_16k: &[i16], threshold: f32, margin_ms: u32) -> Vec<
 /// unchanged.
 #[must_use]
 pub fn rms_normalize(samples_16k: &[i16], target_dbfs: f32) -> Vec<i16> {
-    if samples_16k.is_empty() { return Vec::new(); }
+    if samples_16k.is_empty() {
+        return Vec::new();
+    }
     let scale = f32::from(i16::MAX);
-    let sum_sq: f64 = samples_16k.iter().map(|&s| {
-        let n = f32::from(s) / scale;
-        f64::from(n * n)
-    }).sum();
+    let sum_sq: f64 = samples_16k
+        .iter()
+        .map(|&s| {
+            let n = f32::from(s) / scale;
+            f64::from(n * n)
+        })
+        .sum();
     let rms = ((sum_sq / samples_16k.len() as f64).sqrt()) as f32;
-    if rms <= f32::EPSILON { return samples_16k.to_vec(); }
+    if rms <= f32::EPSILON {
+        return samples_16k.to_vec();
+    }
 
     let target_linear = 10_f32.powf(target_dbfs / 20.0);
     let gain = target_linear / rms;
 
-    samples_16k.iter().map(|&s| {
-        let amplified = (f32::from(s) * gain).clamp(-scale, scale);
-        amplified as i16
-    }).collect()
+    samples_16k
+        .iter()
+        .map(|&s| {
+            let amplified = (f32::from(s) * gain).clamp(-scale, scale);
+            amplified as i16
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------
@@ -189,11 +208,7 @@ pub fn spectral_subtract(samples: &[i16], noise_segment: &[i16], max_noise_dbfs:
         .collect()
 }
 
-fn average_magnitude_spectrum(
-    noise: &[i16],
-    window: &[f32],
-    fft: &Arc<dyn Fft<f32>>,
-) -> Vec<f32> {
+fn average_magnitude_spectrum(noise: &[i16], window: &[f32], fft: &Arc<dyn Fft<f32>>) -> Vec<f32> {
     let mut accum = vec![0.0_f32; NSS_FRAME];
     let mut frames = 0usize;
     let mut frame = vec![Complex32::default(); NSS_FRAME];
@@ -281,7 +296,11 @@ mod tests {
         // Should be ~1.4s (1s tone + 200ms margin each side)
         let expected = (TARGET_SAMPLE_RATE_HZ as f32 * 1.4) as usize;
         let diff = (trimmed.len() as i64 - expected as i64).abs();
-        assert!(diff < 4_000, "expected ~{expected}, got {} (diff {diff})", trimmed.len());
+        assert!(
+            diff < 4_000,
+            "expected ~{expected}, got {} (diff {diff})",
+            trimmed.len()
+        );
     }
 
     #[test]
@@ -294,7 +313,12 @@ mod tests {
         // Quiet tone @ ~1% peak (i.e. very low rms).
         let quiet = tone(1.0, 200);
         let normalized = rms_normalize(&quiet, -20.0);
-        let peak: i16 = normalized.iter().copied().map(|s| s.saturating_abs()).max().unwrap();
+        let peak: i16 = normalized
+            .iter()
+            .copied()
+            .map(|s| s.saturating_abs())
+            .max()
+            .unwrap();
         // After targeting -20 dBFS RMS, peak should be at least 25% of full
         // scale (sine wave: peak ≈ rms * sqrt(2) ≈ 0.10 * 1.4 ≈ 0.14, but
         // because our test signal isn't a pure sine the relation is
@@ -310,7 +334,12 @@ mod tests {
         let filtered = high_pass_filter(&dc, 80.0);
         // Tail samples should be near zero (the filter has had time to
         // settle).
-        let tail_max: i16 = filtered[8_000..].iter().copied().map(|s| s.saturating_abs()).max().unwrap();
+        let tail_max: i16 = filtered[8_000..]
+            .iter()
+            .copied()
+            .map(|s| s.saturating_abs())
+            .max()
+            .unwrap();
         assert!(tail_max < 200, "DC residue too large: {tail_max}");
     }
 
@@ -319,14 +348,28 @@ mod tests {
         // 1 kHz tone, well above the 80 Hz cutoff. After HPF its peak
         // should be essentially unchanged.
         let tone: Vec<i16> = (0..16_000)
-            .map(|i| ((i as f32 / 16_000.0 * 1000.0 * std::f32::consts::TAU).sin() * 16_000.0) as i16)
+            .map(|i| {
+                ((i as f32 / 16_000.0 * 1000.0 * std::f32::consts::TAU).sin() * 16_000.0) as i16
+            })
             .collect();
         let filtered = high_pass_filter(&tone, 80.0);
-        let in_peak: i16 = tone[8_000..].iter().copied().map(|s| s.saturating_abs()).max().unwrap();
-        let out_peak: i16 = filtered[8_000..].iter().copied().map(|s| s.saturating_abs()).max().unwrap();
+        let in_peak: i16 = tone[8_000..]
+            .iter()
+            .copied()
+            .map(|s| s.saturating_abs())
+            .max()
+            .unwrap();
+        let out_peak: i16 = filtered[8_000..]
+            .iter()
+            .copied()
+            .map(|s| s.saturating_abs())
+            .max()
+            .unwrap();
         // Allow ~5% loss; in practice this filter passes >95% of 1 kHz.
-        assert!(out_peak > (in_peak as f32 * 0.9) as i16,
-                "1 kHz attenuated too much: {in_peak} -> {out_peak}");
+        assert!(
+            out_peak > (in_peak as f32 * 0.9) as i16,
+            "1 kHz attenuated too much: {in_peak} -> {out_peak}"
+        );
     }
 
     #[test]
@@ -335,7 +378,12 @@ mod tests {
         let normalized = rms_normalize(&loud, -20.0);
         // No samples should reach exact ±32767 after a target lower than
         // current RMS (gain < 1).
-        let peak: i16 = normalized.iter().copied().map(|s| s.saturating_abs()).max().unwrap();
+        let peak: i16 = normalized
+            .iter()
+            .copied()
+            .map(|s| s.saturating_abs())
+            .max()
+            .unwrap();
         assert!(peak < 32_767, "peak unexpectedly clipped: {peak}");
     }
 
@@ -362,7 +410,10 @@ mod tests {
         let denoised = spectral_subtract(&noise, &noise[..16_000 / 2], -10.0);
         let before = rms_dbfs(&noise);
         let after = rms_dbfs(&denoised);
-        assert!(after < before - 6.0, "expected ≥6 dB reduction, before={before:.1} after={after:.1}");
+        assert!(
+            after < before - 6.0,
+            "expected ≥6 dB reduction, before={before:.1} after={after:.1}"
+        );
     }
 
     #[test]
@@ -378,7 +429,10 @@ mod tests {
         let cleaned = spectral_subtract(&tone_buf, &silence, -10.0);
         let before = peak_fraction(&tone_buf);
         let after = peak_fraction(&cleaned);
-        assert!(after > before * 0.9, "tone was attenuated: {before:.3} -> {after:.3}");
+        assert!(
+            after > before * 0.9,
+            "tone was attenuated: {before:.3} -> {after:.3}"
+        );
     }
 
     #[test]

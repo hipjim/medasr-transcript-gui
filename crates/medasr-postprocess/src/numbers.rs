@@ -10,40 +10,81 @@ use crate::pipeline::Stage;
 pub struct NumbersStage;
 
 const ONES: &[(&str, u64)] = &[
-    ("zero", 0), ("oh", 0),
-    ("one", 1), ("two", 2), ("three", 3), ("four", 4),
-    ("five", 5), ("six", 6), ("seven", 7), ("eight", 8), ("nine", 9),
+    ("zero", 0),
+    ("oh", 0),
+    ("one", 1),
+    ("two", 2),
+    ("three", 3),
+    ("four", 4),
+    ("five", 5),
+    ("six", 6),
+    ("seven", 7),
+    ("eight", 8),
+    ("nine", 9),
 ];
 const TEENS: &[(&str, u64)] = &[
-    ("ten", 10), ("eleven", 11), ("twelve", 12), ("thirteen", 13),
-    ("fourteen", 14), ("fifteen", 15), ("sixteen", 16),
-    ("seventeen", 17), ("eighteen", 18), ("nineteen", 19),
+    ("ten", 10),
+    ("eleven", 11),
+    ("twelve", 12),
+    ("thirteen", 13),
+    ("fourteen", 14),
+    ("fifteen", 15),
+    ("sixteen", 16),
+    ("seventeen", 17),
+    ("eighteen", 18),
+    ("nineteen", 19),
 ];
 const TENS: &[(&str, u64)] = &[
-    ("twenty", 20), ("thirty", 30), ("forty", 40), ("fifty", 50),
-    ("sixty", 60), ("seventy", 70), ("eighty", 80), ("ninety", 90),
+    ("twenty", 20),
+    ("thirty", 30),
+    ("forty", 40),
+    ("fifty", 50),
+    ("sixty", 60),
+    ("seventy", 70),
+    ("eighty", 80),
+    ("ninety", 90),
 ];
 const SCALES: &[(&str, u64)] = &[("hundred", 100), ("thousand", 1_000)];
 
 const UNITS: &[(&str, &str)] = &[
-    ("millimeter", "mm"), ("millimeters", "mm"),
-    ("centimeter", "cm"), ("centimeters", "cm"),
-    ("meter", "m"),       ("meters", "m"),
-    ("milliliter", "mL"), ("milliliters", "mL"),
-    ("liter", "L"),       ("liters", "L"),
-    ("milligram", "mg"),  ("milligrams", "mg"),
-    ("gram", "g"),        ("grams", "g"),
-    ("kilogram", "kg"),   ("kilograms", "kg"),
-    ("microgram", "mcg"), ("micrograms", "mcg"),
-    ("degree", "°"),      ("degrees", "°"),
+    ("millimeter", "mm"),
+    ("millimeters", "mm"),
+    ("centimeter", "cm"),
+    ("centimeters", "cm"),
+    ("meter", "m"),
+    ("meters", "m"),
+    ("milliliter", "mL"),
+    ("milliliters", "mL"),
+    ("liter", "L"),
+    ("liters", "L"),
+    ("milligram", "mg"),
+    ("milligrams", "mg"),
+    ("gram", "g"),
+    ("grams", "g"),
+    ("kilogram", "kg"),
+    ("kilograms", "kg"),
+    ("microgram", "mcg"),
+    ("micrograms", "mcg"),
+    ("degree", "°"),
+    ("degrees", "°"),
     ("percent", "%"),
 ];
 
-fn ones(w: &str) -> Option<u64> { ONES.iter().find(|(k, _)| *k == w).map(|&(_, v)| v) }
-fn teens(w: &str) -> Option<u64> { TEENS.iter().find(|(k, _)| *k == w).map(|&(_, v)| v) }
-fn tens(w: &str) -> Option<u64> { TENS.iter().find(|(k, _)| *k == w).map(|&(_, v)| v) }
-fn scale(w: &str) -> Option<u64> { SCALES.iter().find(|(k, _)| *k == w).map(|&(_, v)| v) }
-fn unit(w: &str) -> Option<&'static str> { UNITS.iter().find(|(k, _)| *k == w).map(|&(_, v)| v) }
+fn ones(w: &str) -> Option<u64> {
+    ONES.iter().find(|(k, _)| *k == w).map(|&(_, v)| v)
+}
+fn teens(w: &str) -> Option<u64> {
+    TEENS.iter().find(|(k, _)| *k == w).map(|&(_, v)| v)
+}
+fn tens(w: &str) -> Option<u64> {
+    TENS.iter().find(|(k, _)| *k == w).map(|&(_, v)| v)
+}
+fn scale(w: &str) -> Option<u64> {
+    SCALES.iter().find(|(k, _)| *k == w).map(|&(_, v)| v)
+}
+fn unit(w: &str) -> Option<&'static str> {
+    UNITS.iter().find(|(k, _)| *k == w).map(|&(_, v)| v)
+}
 
 #[derive(Debug, Clone)]
 struct Token {
@@ -71,7 +112,10 @@ fn tokenize(input: &str) -> Vec<Token> {
         // Strip trailing punctuation immediately after this word.
         let mut trailing_start = i;
         while trailing_start < bytes.len()
-            && matches!(bytes[trailing_start], b'.' | b',' | b';' | b':' | b'?' | b'!')
+            && matches!(
+                bytes[trailing_start],
+                b'.' | b',' | b';' | b':' | b'?' | b'!'
+            )
         {
             trailing_start += 1;
         }
@@ -159,7 +203,9 @@ fn consume_number(tokens: &[Token], start: usize) -> Option<(u64, Option<u64>, u
             current = current.checked_add(v).unwrap_or(current);
             consumed_any = true;
         } else if let Some(s) = scale(w) {
-            if !consumed_any { return None; }
+            if !consumed_any {
+                return None;
+            }
             if s == 1_000 {
                 total += if current == 0 { 1_000 } else { current * 1_000 };
                 current = 0;
@@ -172,9 +218,13 @@ fn consume_number(tokens: &[Token], start: usize) -> Option<(u64, Option<u64>, u
         i += 1;
         // Stop scanning if the previous token had trailing punctuation —
         // that punctuation ends the number sequence cleanly.
-        if !tokens[i - 1].trailing_punct.is_empty() { break; }
+        if !tokens[i - 1].trailing_punct.is_empty() {
+            break;
+        }
     }
-    if !consumed_any { return None; }
+    if !consumed_any {
+        return None;
+    }
     let int_part = total + current;
 
     if i + 1 < tokens.len() && tokens[i].word == "point" && tokens[i].trailing_punct.is_empty() {
@@ -185,9 +235,14 @@ fn consume_number(tokens: &[Token], start: usize) -> Option<(u64, Option<u64>, u
             if let Some(v) = ones(&tokens[j].word) {
                 decimal_digits = decimal_digits * 10 + v;
                 digits_consumed += 1;
-                if !tokens[j].trailing_punct.is_empty() { j += 1; break; }
+                if !tokens[j].trailing_punct.is_empty() {
+                    j += 1;
+                    break;
+                }
                 j += 1;
-            } else { break; }
+            } else {
+                break;
+            }
         }
         if digits_consumed > 0 {
             return Some((int_part, Some(decimal_digits), j - start));
@@ -209,7 +264,7 @@ mod tests {
 
     fn run(s: &str) -> String {
         let mut out = String::new();
-        NumbersStage::default().apply(s, &mut out);
+        NumbersStage.apply(s, &mut out);
         out
     }
 
@@ -250,10 +305,7 @@ mod tests {
 
     #[test]
     fn preserves_newlines_around_numbers() {
-        assert_eq!(
-            run("one\n\ntwo millimeters"),
-            "1\n\n2 mm"
-        );
+        assert_eq!(run("one\n\ntwo millimeters"), "1\n\n2 mm");
     }
 
     #[test]

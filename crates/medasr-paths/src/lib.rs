@@ -7,8 +7,8 @@
 
 #![forbid(unsafe_code)]
 
-use std::path::PathBuf;
 use medasr_types::{Error, Result};
+use std::path::PathBuf;
 
 const APP_QUALIFIER: &str = "org";
 const APP_ORG: &str = "medasr";

@@ -46,12 +46,16 @@ pub enum Event {
     HotkeyPressed,
     /// Hotkey released after `held` time. Used for the press-during-warming
     /// queue heuristic.
-    HotkeyReleased { held: Duration },
+    HotkeyReleased {
+        held: Duration,
+    },
 
     /// Audio capture has produced a non-empty SecureBuffer. The
     /// orchestrator owns the SecureBuffer side-channel separately; the
     /// event itself only carries metadata.
-    AudioReady { samples: usize },
+    AudioReady {
+        samples: usize,
+    },
     /// VAD said no-speech.
     NoSpeech,
     /// ASR worker returned a transcript (orchestrator holds the actual

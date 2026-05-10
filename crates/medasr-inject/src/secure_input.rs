@@ -27,7 +27,9 @@ mod imp {
 
 #[cfg(not(target_os = "macos"))]
 mod imp {
-    pub fn is_secure_input_enabled() -> bool { false }
+    pub fn is_secure_input_enabled() -> bool {
+        false
+    }
 }
 
 /// Probe whether macOS Secure Event Input is currently engaged.

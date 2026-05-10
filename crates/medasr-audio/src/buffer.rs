@@ -5,7 +5,7 @@
 //! warn-event at `WARN_SECS`. The orchestrator subscribes to those events.
 
 use medasr_secure_buffer::SecureBuffer;
-use medasr_types::{TARGET_SAMPLE_RATE_HZ, RECORDING_CAP_SECS, RECORDING_WARN_SECS};
+use medasr_types::{RECORDING_CAP_SECS, RECORDING_WARN_SECS, TARGET_SAMPLE_RATE_HZ};
 
 /// Maximum samples (16 kHz mono) we'll ever hold in the recording buffer.
 pub const CAP_SAMPLES: usize = (TARGET_SAMPLE_RATE_HZ as usize) * (RECORDING_CAP_SECS as usize);
@@ -38,10 +38,18 @@ impl RecordingBuilder {
         }
     }
 
-    pub fn len(&self) -> usize { self.len }
-    pub fn is_empty(&self) -> bool { self.len == 0 }
-    pub fn samples(&self) -> &[i16] { &self.buf[..self.len] }
-    pub fn warn_emitted(&self) -> bool { self.warn_emitted }
+    pub fn len(&self) -> usize {
+        self.len
+    }
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+    pub fn samples(&self) -> &[i16] {
+        &self.buf[..self.len]
+    }
+    pub fn warn_emitted(&self) -> bool {
+        self.warn_emitted
+    }
 
     /// Append samples up to the cap. Returns the number of samples actually
     /// stored and whether the warn threshold crossed during this push.
@@ -77,7 +85,9 @@ impl RecordingBuilder {
 }
 
 impl Default for RecordingBuilder {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

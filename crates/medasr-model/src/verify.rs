@@ -12,9 +12,16 @@ use crate::manifest::ManifestFile;
 #[derive(Debug, Error)]
 pub enum VerifyError {
     #[error("io reading {path}: {source}")]
-    Io { path: String, source: std::io::Error },
+    Io {
+        path: String,
+        source: std::io::Error,
+    },
     #[error("sha256 mismatch for {path}: expected {expected}, got {got}")]
-    Mismatch { path: String, expected: String, got: String },
+    Mismatch {
+        path: String,
+        expected: String,
+        got: String,
+    },
 }
 
 /// Verify a file on disk against its manifest entry. Returns Ok(()) on
@@ -40,7 +47,9 @@ pub fn verify_against_manifest(file: &Path, entry: &ManifestFile) -> Result<(), 
             path: file.display().to_string(),
             source: e,
         })?;
-        if n == 0 { break; }
+        if n == 0 {
+            break;
+        }
         hasher.update(&buf[..n]);
     }
     let got = hex::encode(hasher.finalize());

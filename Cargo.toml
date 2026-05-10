@@ -61,11 +61,13 @@ unsafe_op_in_unsafe_fn = "warn"
 missing_docs           = "allow"   # tighten later
 
 [workspace.lints.clippy]
-all       = { level = "warn", priority = -1 }
-pedantic  = { level = "warn", priority = -1 }
-module_name_repetitions = "allow"
-missing_errors_doc      = "allow"
-missing_panics_doc      = "allow"
+# Standard signal-rich lint set. clippy::pedantic was tried at scaffold
+# time and removed because under CI's -D warnings it produced dozens of
+# style-only errors per crate (doc_markdown wanting backticks around
+# every acronym, must_use_candidate on every getter, cast_truncation on
+# every i16->f32, etc.) and the set grows every Rust release. If a
+# specific pedantic lint is worth catching, opt into it explicitly here.
+all = { level = "warn", priority = -1 }
 
 [profile.release]
 lto           = "thin"

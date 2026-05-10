@@ -38,7 +38,10 @@ pub struct AsrWorkerHandle {
 
 impl AsrWorkerHandle {
     pub fn sender(&self) -> mpsc::Sender<AsrCommand> {
-        self.cmd_tx.as_ref().expect("worker handle still active").clone()
+        self.cmd_tx
+            .as_ref()
+            .expect("worker handle still active")
+            .clone()
     }
 
     pub fn shutdown(mut self) {
@@ -64,9 +67,7 @@ impl Drop for AsrWorkerHandle {
 
 /// Spawn the ASR worker thread. Returns once `Asr::new` has completed
 /// (including warmup) so the caller knows transcription is ready.
-pub fn spawn_worker(
-    paths: ModelPaths,
-) -> Result<AsrWorkerHandle, AsrError> {
+pub fn spawn_worker(paths: ModelPaths) -> Result<AsrWorkerHandle, AsrError> {
     let (cmd_tx, cmd_rx) = mpsc::channel::<AsrCommand>();
     let (init_tx, init_rx) = mpsc::sync_channel::<Result<(), AsrError>>(1);
     let join = std::thread::Builder::new()
@@ -109,7 +110,11 @@ fn run(
 
     while let Ok(cmd) = cmd_rx.recv() {
         match cmd {
-            AsrCommand::Transcribe { samples, cancel, reply } => {
+            AsrCommand::Transcribe {
+                samples,
+                cancel,
+                reply,
+            } => {
                 let result = asr.transcribe(samples.as_slice(), &cancel);
                 if let Err(send_err) = reply.send(result) {
                     error!("asr reply channel closed: {send_err}");

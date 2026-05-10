@@ -5,9 +5,7 @@ use std::time::Duration;
 
 use medasr_asr::{spawn_worker, AsrCommand, AsrWorkerHandle, ModelPaths};
 use medasr_audio::{
-    capture::AudioCapture,
-    resample::resample_to_16k_mono,
-    EnergyVad, VadDecision, VadParams,
+    capture::AudioCapture, resample::resample_to_16k_mono, EnergyVad, VadDecision, VadParams,
 };
 use medasr_focus::capture as capture_focus;
 use medasr_inject::{EnigoBackend, FakeBackend, Injector, KeystrokeBackend};
@@ -55,12 +53,17 @@ impl Orchestrator<EnigoBackend> {
     /// Build with the production injector backend (enigo) and the default
     /// post-processing pipeline.
     pub fn new(model_paths: ModelPaths) -> Result<Self, OrchestratorError> {
-        let asr = spawn_worker(model_paths)
-            .map_err(|e| OrchestratorError::Asr(format!("{e:?}")))?;
+        let asr =
+            spawn_worker(model_paths).map_err(|e| OrchestratorError::Asr(format!("{e:?}")))?;
         let injector = Injector::new(
             EnigoBackend::new().map_err(|e| OrchestratorError::Inject(format!("{e:?}")))?,
         );
-        Ok(Self::with_parts(asr, injector, default_pipeline(), VadParams::default()))
+        Ok(Self::with_parts(
+            asr,
+            injector,
+            default_pipeline(),
+            VadParams::default(),
+        ))
     }
 }
 
@@ -70,11 +73,9 @@ impl Orchestrator<FakeBackend> {
     /// fully-stubbed orchestrator (e.g. unit tests), build one directly
     /// with `with_parts` and a hand-rolled `AsrWorkerHandle` (not
     /// supported in v1; see future work in TESTING.md).
-    pub fn with_fake_backend(
-        model_paths: ModelPaths,
-    ) -> Result<Self, OrchestratorError> {
-        let asr = spawn_worker(model_paths)
-            .map_err(|e| OrchestratorError::Asr(format!("{e:?}")))?;
+    pub fn with_fake_backend(model_paths: ModelPaths) -> Result<Self, OrchestratorError> {
+        let asr =
+            spawn_worker(model_paths).map_err(|e| OrchestratorError::Asr(format!("{e:?}")))?;
         Ok(Self::with_parts(
             asr,
             Injector::new(FakeBackend::new()),
@@ -111,7 +112,9 @@ impl<B: KeystrokeBackend> Orchestrator<B> {
         }
     }
 
-    pub fn state(&self) -> State { self.machine.state() }
+    pub fn state(&self) -> State {
+        self.machine.state()
+    }
 
     /// Run a single press → release → typed-text cycle. Blocking.
     ///
@@ -138,13 +141,17 @@ impl<B: KeystrokeBackend> Orchestrator<B> {
             Ok(t) => t,
             Err(e) => {
                 warn!("focus capture failed: {e}");
-                self.machine.on_event(Event::Error(ErrorClass::TargetWindowLost));
+                self.machine
+                    .on_event(Event::Error(ErrorClass::TargetWindowLost));
                 outcome.final_state = self.machine.state();
                 outcome.error_class = Some(ErrorClass::TargetWindowLost);
                 return outcome;
             }
         };
-        info!("press: pid={} window={}", target.process_id, target.os_window_id);
+        info!(
+            "press: pid={} window={}",
+            target.process_id, target.os_window_id
+        );
 
         let effect = self.machine.on_event(Event::HotkeyPressed);
         if effect != TransitionEffect::StartRecording {
@@ -224,7 +231,8 @@ impl<B: KeystrokeBackend> Orchestrator<B> {
 
         // 4. VAD gate.
         if matches!(self.vad.classify(&resampled), VadDecision::NoSpeech) {
-            self.machine.on_event(Event::HotkeyReleased { held: record_for });
+            self.machine
+                .on_event(Event::HotkeyReleased { held: record_for });
             self.machine.on_event(Event::NoSpeech);
             outcome.final_state = self.machine.state();
             outcome.abort_reason = Some(AbortReason::NoSpeechDetected);
@@ -235,7 +243,8 @@ impl<B: KeystrokeBackend> Orchestrator<B> {
         let mut secure_buf = SecureBuffer::<i16>::with_capacity(resampled.len());
         secure_buf.as_mut_slice().copy_from_slice(&resampled);
 
-        self.machine.on_event(Event::HotkeyReleased { held: record_for });
+        self.machine
+            .on_event(Event::HotkeyReleased { held: record_for });
 
         let cancel = CancellationToken::new();
         let (reply_tx, reply_rx) = mpsc::channel();
@@ -245,7 +254,8 @@ impl<B: KeystrokeBackend> Orchestrator<B> {
             reply: reply_tx,
         });
         if send_result.is_err() {
-            self.machine.on_event(Event::Error(ErrorClass::InferenceFailed));
+            self.machine
+                .on_event(Event::Error(ErrorClass::InferenceFailed));
             outcome.final_state = self.machine.state();
             outcome.error_class = Some(ErrorClass::InferenceFailed);
             return outcome;
@@ -255,13 +265,15 @@ impl<B: KeystrokeBackend> Orchestrator<B> {
             Ok(Ok(r)) => r,
             Ok(Err(e)) => {
                 warn!("asr error: {e:?}");
-                self.machine.on_event(Event::Error(ErrorClass::InferenceFailed));
+                self.machine
+                    .on_event(Event::Error(ErrorClass::InferenceFailed));
                 outcome.final_state = self.machine.state();
                 outcome.error_class = Some(ErrorClass::InferenceFailed);
                 return outcome;
             }
             Err(_) => {
-                self.machine.on_event(Event::Error(ErrorClass::InferenceFailed));
+                self.machine
+                    .on_event(Event::Error(ErrorClass::InferenceFailed));
                 outcome.final_state = self.machine.state();
                 outcome.error_class = Some(ErrorClass::InferenceFailed);
                 return outcome;
@@ -282,7 +294,8 @@ impl<B: KeystrokeBackend> Orchestrator<B> {
         // 7. Inject.
         if let Err(e) = self.injector.inject(&typed, &target) {
             warn!("inject failed: {e}");
-            self.machine.on_event(Event::Error(ErrorClass::TargetWindowLost));
+            self.machine
+                .on_event(Event::Error(ErrorClass::TargetWindowLost));
             outcome.final_state = self.machine.state();
             outcome.error_class = Some(ErrorClass::TargetWindowLost);
             return outcome;
@@ -328,4 +341,3 @@ impl StartDefault for AudioCapture {
         medasr_audio::capture::start().map_err(|e| OrchestratorError::Audio(format!("{e:?}")))
     }
 }
-

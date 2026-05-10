@@ -12,7 +12,9 @@ pub struct Pipeline {
 
 impl Pipeline {
     #[must_use]
-    pub fn new() -> Self { Self { stages: Vec::new() } }
+    pub fn new() -> Self {
+        Self { stages: Vec::new() }
+    }
 
     #[must_use]
     pub fn with<S: Stage + 'static>(mut self, stage: S) -> Self {
@@ -35,5 +37,7 @@ impl Pipeline {
 }
 
 impl Default for Pipeline {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

@@ -5,7 +5,7 @@
 //! anyway, (b) we keep the audio callback as cheap as possible to avoid
 //! sample drops on busy hospital workstations.
 
-use rubato::{Resampler, FftFixedIn};
+use rubato::{FftFixedIn, Resampler};
 use thiserror::Error;
 
 use medasr_types::TARGET_SAMPLE_RATE_HZ;
@@ -46,8 +46,8 @@ pub fn resample_to_16k_mono(
         for f in 0..frames {
             let start = f * channels as usize;
             let end = start + channels as usize;
-            let mean: f32 = samples_interleaved[start..end].iter().copied().sum::<f32>()
-                / channels as f32;
+            let mean: f32 =
+                samples_interleaved[start..end].iter().copied().sum::<f32>() / channels as f32;
             mono.push(mean);
         }
     }
@@ -57,9 +57,14 @@ pub fn resample_to_16k_mono(
         mono
     } else {
         let chunk = 1024.min(mono.len()).max(1);
-        let mut resampler =
-            FftFixedIn::<f32>::new(src_rate as usize, TARGET_SAMPLE_RATE_HZ as usize, chunk, 2, 1)
-                .map_err(|e| ResampleError::Init(e.to_string()))?;
+        let mut resampler = FftFixedIn::<f32>::new(
+            src_rate as usize,
+            TARGET_SAMPLE_RATE_HZ as usize,
+            chunk,
+            2,
+            1,
+        )
+        .map_err(|e| ResampleError::Init(e.to_string()))?;
 
         let mut input_pos = 0usize;
         let chunk_in = resampler.input_frames_next();
@@ -111,7 +116,9 @@ mod tests {
     #[test]
     fn downsamples_48k_mono_to_16k() {
         // 1 second of audio at 48 kHz.
-        let mono: Vec<f32> = (0..48_000).map(|i| (i as f32 / 48_000.0 * 220.0).sin()).collect();
+        let mono: Vec<f32> = (0..48_000)
+            .map(|i| (i as f32 / 48_000.0 * 220.0).sin())
+            .collect();
         let out = resample_to_16k_mono(&mono, 48_000, 1).unwrap();
         // Expect ~16 000 samples (rubato adds a small tail).
         let diff = (out.len() as i64 - 16_000).abs();

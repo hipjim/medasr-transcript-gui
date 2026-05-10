@@ -19,11 +19,17 @@ pub enum ChunkingPolicy {
 
 impl ChunkingPolicy {
     pub const fn native_default() -> Self {
-        Self::Native { chunk_chars: 256, delay_ms: 0 }
+        Self::Native {
+            chunk_chars: 256,
+            delay_ms: 0,
+        }
     }
 
     pub const fn vdi_default() -> Self {
-        Self::Vdi { chunk_chars: 64, delay_ms: 5 }
+        Self::Vdi {
+            chunk_chars: 64,
+            delay_ms: 5,
+        }
     }
 
     pub fn chunk_chars(&self) -> usize {
@@ -36,9 +42,7 @@ impl ChunkingPolicy {
 
     pub fn delay_ms(&self) -> u64 {
         match self {
-            Self::Native { delay_ms, .. } | Self::Vdi { delay_ms, .. } => {
-                u64::from(*delay_ms)
-            }
+            Self::Native { delay_ms, .. } | Self::Vdi { delay_ms, .. } => u64::from(*delay_ms),
         }
     }
 }

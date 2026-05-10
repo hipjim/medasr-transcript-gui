@@ -62,10 +62,14 @@ pub struct Machine {
 impl Machine {
     #[must_use]
     pub fn new() -> Self {
-        Self { state: State::Uninitialized }
+        Self {
+            state: State::Uninitialized,
+        }
     }
 
-    pub fn state(&self) -> State { self.state }
+    pub fn state(&self) -> State {
+        self.state
+    }
 
     /// Apply an event and return a `TransitionEffect`.
     ///
@@ -79,9 +83,7 @@ impl Machine {
             (State::EulaPending, Event::EulaAccepted) => {
                 (State::PermissionsPending, TransitionEffect::None)
             }
-            (State::EulaPending, Event::EulaDeclined) => {
-                (State::Quitting, TransitionEffect::None)
-            }
+            (State::EulaPending, Event::EulaDeclined) => (State::Quitting, TransitionEffect::None),
             (State::PermissionsPending, Event::PermissionsGranted) => {
                 (State::ModelMissing, TransitionEffect::None)
             }
@@ -91,18 +93,17 @@ impl Machine {
             (State::Downloading, Event::ModelDownloadComplete) => {
                 (State::Verifying, TransitionEffect::None)
             }
-            (State::Verifying, Event::ModelVerifyOk) => {
-                (State::Warming, TransitionEffect::None)
-            }
+            (State::Verifying, Event::ModelVerifyOk) => (State::Warming, TransitionEffect::None),
             (State::Warming, Event::WarmupComplete) => (State::Ready, TransitionEffect::None),
 
             // Push-to-talk
             (State::Ready, Event::HotkeyPressed) => {
                 (State::Recording, TransitionEffect::StartRecording)
             }
-            (State::Recording, Event::HotkeyReleased { .. }) => {
-                (State::Transcribing, TransitionEffect::StopRecordingAndTranscribe)
-            }
+            (State::Recording, Event::HotkeyReleased { .. }) => (
+                State::Transcribing,
+                TransitionEffect::StopRecordingAndTranscribe,
+            ),
             (State::Recording, Event::Aborted(r)) => {
                 (State::Aborted(r), TransitionEffect::DropAudioBuffer)
             }
@@ -112,9 +113,7 @@ impl Machine {
             (State::Transcribing, Event::Aborted(r)) => {
                 (State::Aborted(r), TransitionEffect::DropAudioBuffer)
             }
-            (State::Injecting, Event::InjectionComplete) => {
-                (State::Ready, TransitionEffect::None)
-            }
+            (State::Injecting, Event::InjectionComplete) => (State::Ready, TransitionEffect::None),
             (State::Injecting, Event::Error(c)) => {
                 (State::Error(c), TransitionEffect::ShowErrorToast(c))
             }
@@ -134,8 +133,12 @@ impl Machine {
             // Errors from anywhere active that wasn't already matched
             // above (Injecting + Error is handled earlier).
             (
-                State::Recording | State::Transcribing | State::Warming
-                | State::Downloading | State::Verifying | State::Ready,
+                State::Recording
+                | State::Transcribing
+                | State::Warming
+                | State::Downloading
+                | State::Verifying
+                | State::Ready,
                 Event::Error(c),
             ) => (State::Error(c), TransitionEffect::ShowErrorToast(c)),
 
@@ -169,7 +172,9 @@ impl Machine {
 }
 
 impl Default for Machine {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -198,7 +203,9 @@ mod tests {
         );
         assert_eq!(m.state(), State::Recording);
         assert_eq!(
-            m.on_event(Event::HotkeyReleased { held: Duration::from_secs(2) }),
+            m.on_event(Event::HotkeyReleased {
+                held: Duration::from_secs(2)
+            }),
             TransitionEffect::StopRecordingAndTranscribe
         );
         assert_eq!(m.state(), State::Transcribing);
@@ -216,9 +223,17 @@ mod tests {
         let mut m = Machine::new();
         drive_to_ready(&mut m);
         m.on_event(Event::HotkeyPressed);
-        m.on_event(Event::HotkeyReleased { held: Duration::from_millis(50) });
-        assert_eq!(m.on_event(Event::NoSpeech), TransitionEffect::DropAudioBuffer);
-        assert!(matches!(m.state(), State::Aborted(AbortReason::NoSpeechDetected)));
+        m.on_event(Event::HotkeyReleased {
+            held: Duration::from_millis(50),
+        });
+        assert_eq!(
+            m.on_event(Event::NoSpeech),
+            TransitionEffect::DropAudioBuffer
+        );
+        assert!(matches!(
+            m.state(),
+            State::Aborted(AbortReason::NoSpeechDetected)
+        ));
         // Acknowledge -> Ready.
         m.on_event(Event::Acknowledged);
         assert_eq!(m.state(), State::Ready);
@@ -241,7 +256,10 @@ mod tests {
         m.on_event(Event::HotkeyPressed);
         let eff = m.on_event(Event::Aborted(AbortReason::CapExceeded));
         assert_eq!(eff, TransitionEffect::DropAudioBuffer);
-        assert!(matches!(m.state(), State::Aborted(AbortReason::CapExceeded)));
+        assert!(matches!(
+            m.state(),
+            State::Aborted(AbortReason::CapExceeded)
+        ));
     }
 
     #[test]
@@ -249,7 +267,9 @@ mod tests {
         let mut m = Machine::new();
         drive_to_ready(&mut m);
         // HotkeyReleased while Ready is invalid; should be a no-op.
-        let eff = m.on_event(Event::HotkeyReleased { held: Duration::from_secs(1) });
+        let eff = m.on_event(Event::HotkeyReleased {
+            held: Duration::from_secs(1),
+        });
         assert_eq!(eff, TransitionEffect::None);
         assert_eq!(m.state(), State::Ready);
     }
@@ -267,13 +287,18 @@ mod tests {
         let mut m = Machine::new();
         drive_to_ready(&mut m);
         m.on_event(Event::HotkeyPressed);
-        m.on_event(Event::HotkeyReleased { held: Duration::from_secs(2) });
+        m.on_event(Event::HotkeyReleased {
+            held: Duration::from_secs(2),
+        });
         m.on_event(Event::TranscriptReady);
         let eff = m.on_event(Event::Error(ErrorClass::TargetWindowLost));
         assert_eq!(
             eff,
             TransitionEffect::ShowErrorToast(ErrorClass::TargetWindowLost)
         );
-        assert!(matches!(m.state(), State::Error(ErrorClass::TargetWindowLost)));
+        assert!(matches!(
+            m.state(),
+            State::Error(ErrorClass::TargetWindowLost)
+        ));
     }
 }

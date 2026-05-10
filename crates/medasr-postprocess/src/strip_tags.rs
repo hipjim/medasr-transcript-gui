@@ -41,7 +41,7 @@ impl Stage for StripTagsStage {
         }
         // Tidy: collapse a leading run of spaces / blank lines that the
         // strip might have left behind.
-        let trimmed_start = out.trim_start_matches(|c: char| c == ' ' || c == '\t').to_owned();
+        let trimmed_start = out.trim_start_matches([' ', '\t']).to_owned();
         out.clear();
         out.push_str(&trimmed_start);
     }
@@ -49,27 +49,35 @@ impl Stage for StripTagsStage {
 
 fn is_structural_tag(body: &str) -> bool {
     // Empty bodies aren't tags ([]).
-    if body.is_empty() { return false; }
+    if body.is_empty() {
+        return false;
+    }
     // Require at least one uppercase letter.
-    if !body.chars().any(|c| c.is_ascii_uppercase()) { return false; }
+    if !body.chars().any(|c| c.is_ascii_uppercase()) {
+        return false;
+    }
     // All chars must be uppercase / space / slash / hyphen / digit.
-    body.chars().all(|c| {
-        c.is_ascii_uppercase()
-            || c == ' '
-            || c == '/'
-            || c == '-'
-            || c.is_ascii_digit()
-    })
+    body.chars()
+        .all(|c| c.is_ascii_uppercase() || c == ' ' || c == '/' || c == '-' || c.is_ascii_digit())
 }
 
 fn next_utf8_boundary(bytes: &[u8], i: usize) -> usize {
-    if i >= bytes.len() { return bytes.len(); }
+    if i >= bytes.len() {
+        return bytes.len();
+    }
     let b = bytes[i];
-    let len = if b < 0x80 { 1 }
-        else if b < 0xC0 { 1 }
-        else if b < 0xE0 { 2 }
-        else if b < 0xF0 { 3 }
-        else { 4 };
+    // ASCII (< 0x80) and continuation/invalid lead bytes (< 0xC0) both
+    // advance one byte; the latter to make progress on malformed input
+    // rather than looping.
+    let len = if b < 0xC0 {
+        1
+    } else if b < 0xE0 {
+        2
+    } else if b < 0xF0 {
+        3
+    } else {
+        4
+    };
     (i + len).min(bytes.len())
 }
 
@@ -79,7 +87,7 @@ mod tests {
 
     fn run(s: &str) -> String {
         let mut out = String::new();
-        StripTagsStage::default().apply(s, &mut out);
+        StripTagsStage.apply(s, &mut out);
         out
     }
 
@@ -118,9 +126,6 @@ mod tests {
 
     #[test]
     fn handles_dash_and_slash_in_tag() {
-        assert_eq!(
-            run("[CT/MRI-CONTRAST] enhanced"),
-            "enhanced"
-        );
+        assert_eq!(run("[CT/MRI-CONTRAST] enhanced"), "enhanced");
     }
 }

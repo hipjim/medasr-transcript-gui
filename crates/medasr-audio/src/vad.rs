@@ -56,8 +56,7 @@ impl EnergyVad {
         if samples_16k_i16.is_empty() {
             return VadDecision::NoSpeech;
         }
-        let frame_len =
-            (TARGET_SAMPLE_RATE_HZ as usize * self.params.frame_ms as usize) / 1000;
+        let frame_len = (TARGET_SAMPLE_RATE_HZ as usize * self.params.frame_ms as usize) / 1000;
         if frame_len == 0 {
             return VadDecision::NoSpeech;
         }
@@ -66,7 +65,9 @@ impl EnergyVad {
         let mut max_rms: f32 = 0.0;
         for chunk in samples_16k_i16.chunks(frame_len) {
             let rms = rms_normalized(chunk);
-            if rms > max_rms { max_rms = rms; }
+            if rms > max_rms {
+                max_rms = rms;
+            }
             if rms >= self.params.energy_threshold {
                 voiced_frames += 1;
             }

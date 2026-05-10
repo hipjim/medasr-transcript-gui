@@ -12,11 +12,16 @@ pub struct FakeBackend {
 }
 
 impl FakeBackend {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     /// All chunks the injector dispatched, in order.
     pub fn calls(&self) -> Vec<String> {
-        self.calls.lock().expect("fake backend mutex poisoned").clone()
+        self.calls
+            .lock()
+            .expect("fake backend mutex poisoned")
+            .clone()
     }
 
     /// Reconstructed full string the caller intended to type.
@@ -25,7 +30,10 @@ impl FakeBackend {
     }
 
     pub fn call_count(&self) -> usize {
-        self.calls.lock().expect("fake backend mutex poisoned").len()
+        self.calls
+            .lock()
+            .expect("fake backend mutex poisoned")
+            .len()
     }
 }
 
