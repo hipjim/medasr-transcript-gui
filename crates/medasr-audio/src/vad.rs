@@ -28,8 +28,11 @@ impl Default for VadParams {
     fn default() -> Self {
         Self {
             frame_ms: 20,
-            energy_threshold: 0.01,
-            min_voiced_ms: 200,
+            // 0.01 was too tight against typical condenser mic levels in
+            // quiet rooms; lowered to 0.003 (≈ -50 dBFS RMS) which still
+            // sits comfortably above background hum on dev hardware.
+            energy_threshold: 0.003,
+            min_voiced_ms: 100,
         }
     }
 }
@@ -60,18 +63,29 @@ impl EnergyVad {
         }
 
         let mut voiced_frames: u32 = 0;
+        let mut max_rms: f32 = 0.0;
         for chunk in samples_16k_i16.chunks(frame_len) {
             let rms = rms_normalized(chunk);
+            if rms > max_rms { max_rms = rms; }
             if rms >= self.params.energy_threshold {
                 voiced_frames += 1;
             }
         }
         let voiced_ms = voiced_frames * u32::from(self.params.frame_ms);
-        if voiced_ms >= u32::from(self.params.min_voiced_ms) {
+        let decision = if voiced_ms >= u32::from(self.params.min_voiced_ms) {
             VadDecision::Speech
         } else {
             VadDecision::NoSpeech
-        }
+        };
+        tracing::info!(
+            "vad: samples={} max_rms={:.4} threshold={:.4} voiced_ms={} -> {:?}",
+            samples_16k_i16.len(),
+            max_rms,
+            self.params.energy_threshold,
+            voiced_ms,
+            decision,
+        );
+        decision
     }
 }
 
@@ -126,9 +140,9 @@ mod tests {
 
     #[test]
     fn brief_blip_under_min_voiced_ms_is_no_speech() {
-        // 100 ms blip < default 200 ms threshold.
+        // 40 ms blip < default 100 ms threshold.
         let vad = EnergyVad::new(VadParams::default());
-        let buf = sine(0.1, 220.0, 0.3);
+        let buf = sine(0.04, 220.0, 0.3);
         assert_eq!(vad.classify(&buf), VadDecision::NoSpeech);
     }
 

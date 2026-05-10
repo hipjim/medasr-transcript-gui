@@ -74,7 +74,7 @@ impl Asr {
             },
             tokens: Some(paths.tokens_txt.to_string_lossy().into_owned()),
             num_threads: num_threads(),
-            debug: false,
+            debug: std::env::var("MEDASR_DEBUG").is_ok(),
             provider: Some("cpu".to_string()),
             ..Default::default()
         };
@@ -111,10 +111,27 @@ impl Asr {
         // stays mlock'd / zero-on-drop. (sherpa-onnx C API will copy this
         // internally; the heap copy inside ONNX Runtime is the documented
         // residual gap.)
-        let scale = 1.0_f32 / f32::from(i16::MAX);
+        //
+        // Boost-only auto-gain: if the buffer is already healthy (peak
+        // ≥ 50% of full-scale) we hand it through untouched. Otherwise
+        // we lift it toward -3 dBFS peak. Callers that already RMS-
+        // normalize upstream (the GUI) hit the no-op path; callers that
+        // hand us raw quiet audio (CLI wav-mode) get the lift. Never
+        // attenuates: clean audio reaches the model unchanged.
+        let peak: i16 = samples_16k_i16
+            .iter()
+            .copied()
+            .map(|s| s.saturating_abs())
+            .max()
+            .unwrap_or(1)
+            .max(1);
+        let peak_norm = f32::from(peak) / f32::from(i16::MAX);
+        let gain = if peak_norm >= 0.5 { 1.0 } else { 0.71 / peak_norm };
+        let scale = gain / f32::from(i16::MAX);
+        debug!("normalising: peak {} ({:.0}%) -> gain {:.2}x", peak, peak_norm * 100.0, gain);
         let mut f32_buf = SecureBuffer::<f32>::with_capacity(n);
         for (dst, &src) in f32_buf.as_mut_slice().iter_mut().zip(samples_16k_i16) {
-            *dst = f32::from(src) * scale;
+            *dst = (f32::from(src) * scale).clamp(-1.0, 1.0);
         }
 
         if cancel.is_cancelled() {

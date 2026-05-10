@@ -17,6 +17,7 @@ members = [
     "crates/medasr-settings",
     "crates/medasr-lifecycle",
     "crates/medasr-cli",
+    "crates/medasr-gui",
     "src-tauri",
 ]
 

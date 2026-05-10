@@ -10,7 +10,7 @@
 //! a mic hot-swap between recordings is handled transparently.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, SampleFormat, Stream, StreamConfig};
@@ -46,7 +46,52 @@ pub struct AudioCapture {
     pub config: CaptureConfig,
     pub consumer: rtrb::Consumer<f32>,
     pub overflow_flag: Arc<AtomicBool>,
+    /// Most-recent in-callback peak amplitude, scaled to 0..=10000 (i.e.
+    /// integer hundredths of a percent of full scale). The audio
+    /// callback writes; UI/orchestrator polls.
+    pub peak_centi_pct: Arc<AtomicU32>,
     _stream: Stream,
+}
+
+impl AudioCapture {
+    /// Read the most recent peak level as a 0.0..=1.0 fraction.
+    pub fn current_peak_fraction(&self) -> f32 {
+        self.peak_centi_pct.load(Ordering::Relaxed) as f32 / 10_000.0
+    }
+}
+
+/// One available input device, surfaced for the UI device picker.
+#[derive(Clone)]
+pub struct InputDevice {
+    pub name: String,
+    pub device: Device,
+}
+
+impl std::fmt::Debug for InputDevice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "InputDevice {{ name: {:?} }}", self.name)
+    }
+}
+
+pub fn list_input_devices() -> Vec<InputDevice> {
+    let host = cpal::default_host();
+    host.input_devices()
+        .map(|it| {
+            it.map(|d| InputDevice {
+                name: d.name().unwrap_or_else(|_| "<unnamed>".into()),
+                device: d,
+            })
+            .collect()
+        })
+        .unwrap_or_default()
+}
+
+pub fn default_input_device() -> Option<InputDevice> {
+    let host = cpal::default_host();
+    host.default_input_device().map(|d| InputDevice {
+        name: d.name().unwrap_or_else(|_| "<unnamed>".into()),
+        device: d,
+    })
 }
 
 /// Default ring capacity: ~250 ms @ 192 kHz × 8 channels (worst-case
@@ -55,12 +100,13 @@ pub struct AudioCapture {
 const RING_CAPACITY: usize = 192_000 * 2 / 4; // ~96 000 f32 samples
 
 pub fn start() -> Result<AudioCapture, CaptureError> {
-    let host = cpal::default_host();
-    let device = host
-        .default_input_device()
-        .ok_or(CaptureError::NoInputDevice)?;
+    let device = default_input_device().ok_or(CaptureError::NoInputDevice)?;
+    start_with_device(&device)
+}
 
+pub fn start_with_device(device: &InputDevice) -> Result<AudioCapture, CaptureError> {
     let supported = device
+        .device
         .default_input_config()
         .map_err(|e| CaptureError::DefaultConfig(e.to_string()))?;
     let sample_format = supported.sample_format();
@@ -73,12 +119,24 @@ pub fn start() -> Result<AudioCapture, CaptureError> {
     let (mut producer, consumer) = RingBuffer::<f32>::new(RING_CAPACITY);
     let overflow_flag = Arc::new(AtomicBool::new(false));
     let overflow_flag_clb = Arc::clone(&overflow_flag);
+    let peak_centi_pct = Arc::new(AtomicU32::new(0));
+    let peak_clb = Arc::clone(&peak_centi_pct);
 
     let stream = build_stream(
-        &device,
+        &device.device,
         &stream_config,
         sample_format,
         move |samples: &[f32]| {
+            // Update the peak meter (integer hundredths of a percent of
+            // full scale, exponential-decay smoothing).
+            let mut peak: f32 = 0.0;
+            for &s in samples {
+                let a = s.abs();
+                if a > peak { peak = a; }
+            }
+            let prev = peak_clb.load(Ordering::Relaxed) as f32 / 10_000.0;
+            let smoothed = if peak > prev { peak } else { prev * 0.85 + peak * 0.15 };
+            peak_clb.store((smoothed * 10_000.0) as u32, Ordering::Relaxed);
             push_into_ring(&mut producer, samples, &overflow_flag_clb);
         },
     )?;
@@ -90,6 +148,7 @@ pub fn start() -> Result<AudioCapture, CaptureError> {
         config: cfg,
         consumer,
         overflow_flag,
+        peak_centi_pct,
         _stream: stream,
     })
 }

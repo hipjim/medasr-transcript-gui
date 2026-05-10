@@ -1,18 +1,18 @@
 [package]
-name = "medasr-cli"
+name = "medasr-gui"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "Phase 1 milestone binary. Exempt from the library 'max 3 peer deps' DAG rule."
+description = "Native egui-based UI for MedASR. Records audio, transcribes, displays in-app — no keystroke injection, no global hotkey."
 
 [lints]
 workspace = true
 
 [[bin]]
-name = "medasr-cli"
+name = "medasr-gui"
 path = "src/main.rs"
 
 [dependencies]
@@ -21,12 +21,11 @@ medasr-secure-buffer = { workspace = true }
 medasr-audio         = { workspace = true }
 medasr-asr           = { workspace = true }
 medasr-postprocess   = { workspace = true }
-medasr-hotkey        = { workspace = true }
-medasr-focus         = { workspace = true }
-medasr-inject        = { workspace = true }
-medasr-lifecycle     = { workspace = true }
+tokio-util           = { workspace = true }
 tracing              = { workspace = true }
 tracing-subscriber   = { version = "0.3", features = ["env-filter"] }
-hound                = "3"
-cpal                 = "0.15"
-tokio-util           = { workspace = true }
+
+eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
+egui   = "0.31"
+rfd    = "0.14"
+hound  = "3"

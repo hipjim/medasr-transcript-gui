@@ -119,6 +119,13 @@ impl<B: KeystrokeBackend> Orchestrator<B> {
     /// hotkey-release event to call this; this signature lets tests and
     /// the Phase 1A demo record-by-time.
     pub fn run_once(&mut self, record_for: Duration) -> RunOnceOutcome {
+        // Auto-acknowledge any sticky soft-abort or error from the prior
+        // cycle so the next press starts a fresh recording. Without this,
+        // a NoSpeechDetected from the last cycle would jam the machine.
+        if matches!(self.machine.state(), State::Aborted(_) | State::Error(_)) {
+            self.machine.on_event(Event::Acknowledged);
+        }
+
         let mut outcome = RunOnceOutcome {
             final_state: self.machine.state(),
             typed: None,
@@ -140,7 +147,11 @@ impl<B: KeystrokeBackend> Orchestrator<B> {
         info!("press: pid={} window={}", target.process_id, target.os_window_id);
 
         let effect = self.machine.on_event(Event::HotkeyPressed);
-        debug_assert_eq!(effect, TransitionEffect::StartRecording);
+        if effect != TransitionEffect::StartRecording {
+            warn!(?effect, state = ?self.machine.state(), "machine refused HotkeyPressed; skipping cycle");
+            outcome.final_state = self.machine.state();
+            return outcome;
+        }
 
         let mut capture = match AudioCapture::start_default() {
             Ok(c) => c,
@@ -189,6 +200,28 @@ impl<B: KeystrokeBackend> Orchestrator<B> {
             }
         };
 
+        // Debug aid: optionally dump the resampled audio to a wav so the
+        // user can re-transcribe it via `medasr-cli wav` and isolate
+        // capture from inference. Enabled by `MEDASR_DUMP_WAV=/path`.
+        if let Ok(path) = std::env::var("MEDASR_DUMP_WAV") {
+            let spec = hound::WavSpec {
+                channels: 1,
+                sample_rate: 16_000,
+                bits_per_sample: 16,
+                sample_format: hound::SampleFormat::Int,
+            };
+            match hound::WavWriter::create(&path, spec) {
+                Ok(mut w) => {
+                    for &s in &resampled {
+                        let _ = w.write_sample(s);
+                    }
+                    let _ = w.finalize();
+                    info!("dumped capture to {path}");
+                }
+                Err(e) => warn!("MEDASR_DUMP_WAV: {e}"),
+            }
+        }
+
         // 4. VAD gate.
         if matches!(self.vad.classify(&resampled), VadDecision::NoSpeech) {
             self.machine.on_event(Event::HotkeyReleased { held: record_for });
@@ -236,6 +269,12 @@ impl<B: KeystrokeBackend> Orchestrator<B> {
         };
 
         self.machine.on_event(Event::TranscriptReady);
+        info!(
+            "asr raw: {:?} (inference {} ms over {} ms audio)",
+            asr_result.text,
+            asr_result.inference_latency.as_millis(),
+            asr_result.audio_duration.as_millis()
+        );
 
         // 6. Post-process.
         let typed = self.pipeline.run(&asr_result.text);
