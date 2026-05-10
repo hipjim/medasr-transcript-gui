@@ -1,6 +1,6 @@
 # MedASR
 
-A local-only push-to-talk dictation desktop app for radiologists, built on
+A local-only push-to-talk dictation POC, built on
 Google's MedASR Conformer-CTC model. Audio and PHI never leave the device.
 
 > **Status: Unit 1 scaffold.** The plan ([`docs/plans/2026-05-07-001-feat-medasr-desktop-dictation-plan.md`](docs/plans/2026-05-07-001-feat-medasr-desktop-dictation-plan.md))
